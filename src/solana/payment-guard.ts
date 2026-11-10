@@ -5,8 +5,8 @@ import { USDC_MINT } from "../domain/tokens";
 
 // This validates only the deliberately narrow API payment shape. Provider swap
 // instructions have no approved decoder and are always rejected by this guard.
-export function validatePaymentTransaction(tx: VersionedTransaction, plan: PaidPlan): void {
-  validatePlan(plan);
+export function validatePaymentTransaction(tx: VersionedTransaction, plan: PaidPlan, at = Date.now()): void {
+  validatePlan(plan, at);
   const message = tx.message;
   if (message.version !== 0 || message.addressTableLookups.length !== 0) throw new Error("Payment lookup tables or legacy messages are not supported");
   const signers = message.staticAccountKeys.slice(0, message.header.numRequiredSignatures).map((key) => key.toBase58());

@@ -7,6 +7,11 @@ import { PublicKey } from "@solana/web3.js";
 export const QUOTE_URL = "https://hermes.swap.io/v1/swap/quote";
 export const HARD_CALL_ATOMIC = 10_000n; // 0.01 USDC; independent of callers
 export const HARD_DAILY_ATOMIC = 50_000n; // 0.05 USDC, UTC, includes unknown attempts
+export const HARD_LIFETIME_ATOMIC = 100_000n;
+export const HARD_RESERVE_ATOMIC = 100_000n;
+// Independently pinned, not derived solely from a caller or a new challenge.
+export const HERMES_PAYEE = "BPz2u6eoWLervxEqfpsMCVmKk7h6fEVsd7L5rvEibMfD";
+export const HERMES_FEE_PAYER = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4";
 const address = z.string().refine((v) => { try { return new PublicKey(v).toBase58() === v; } catch { return false; } });
 const atomic = z.string().regex(/^[1-9]\d{0,18}$/);
 export const paidPlanSchema = z.object({
@@ -28,6 +33,7 @@ export const paidPlanSchema = z.object({
   }).strict(),
   maxAtomic: atomic,
   dailyLimitAtomic: atomic,
+  lifetimeLimitAtomic: atomic.default("100000"),
   reserveAtomic: z.string().regex(/^\d{1,19}$/),
 }).strict();
 export type PaidPlan = z.infer<typeof paidPlanSchema>;
@@ -38,6 +44,9 @@ export function validatePlan(raw: unknown, now = Date.now()): PaidPlan {
   if (created > now || expires <= now || expires - created > 15 * 60_000) throw new Error("Plan expired or has an invalid lifetime");
   if (BigInt(plan.maxAtomic) > HARD_CALL_ATOMIC || BigInt(plan.terms.amount) > BigInt(plan.maxAtomic)) throw new Error("Hard per-request ceiling exceeded");
   if (BigInt(plan.dailyLimitAtomic) > HARD_DAILY_ATOMIC || BigInt(plan.dailyLimitAtomic) < BigInt(plan.terms.amount)) throw new Error("Invalid daily limit");
+  if (BigInt(plan.lifetimeLimitAtomic) > HARD_LIFETIME_ATOMIC || BigInt(plan.lifetimeLimitAtomic) < BigInt(plan.terms.amount)) throw new Error("Invalid lifetime limit");
+  if (BigInt(plan.reserveAtomic) < HARD_RESERVE_ATOMIC) throw new Error("Hard reserve cannot be reduced");
+  if (plan.terms.payTo !== HERMES_PAYEE || plan.terms.feePayer !== HERMES_FEE_PAYER) throw new Error("Payment destination is outside the independent Hermes allowlist");
   if (plan.payer === plan.terms.feePayer || plan.payer === plan.terms.payTo) throw new Error("Payer must be independent of facilitator and payee");
   return plan;
 }
@@ -49,6 +58,7 @@ export function validateTerms(plan: PaidPlan, terms: Record<string, unknown>, co
   validatePlan(plan);
   const extra = terms.extra as { feePayer?: unknown } | undefined;
   const resource = terms.resource ?? (context.declaredResource as { url?: unknown } | undefined)?.url;
+  if (terms.maxTimeoutSeconds !== undefined && (typeof terms.maxTimeoutSeconds !== "number" || !Number.isInteger(terms.maxTimeoutSeconds) || terms.maxTimeoutSeconds <= 0 || terms.maxTimeoutSeconds > 60)) throw new Error("Unsafe payment timeout");
   if (context.requestUrl !== plan.url || context.responseUrl !== plan.url || resource !== plan.url ||
       terms.scheme !== plan.terms.scheme || terms.network !== plan.terms.network || terms.asset !== plan.terms.asset ||
       terms.payTo !== plan.terms.payTo || extra?.feePayer !== plan.terms.feePayer || terms.amount !== plan.terms.amount ||

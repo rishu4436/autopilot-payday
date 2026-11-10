@@ -1,5 +1,7 @@
 # AUTOPILOT PAYDAY independent engineering audit
 
+Historical baseline report. The post-audit changes, local Git initialization, updated verification and current remaining blockers are recorded in [POST-AUDIT-REPORT.md](POST-AUDIT-REPORT.md). Original audit observations below are preserved for comparison.
+
 Date: 2026-11-10 (Asia/Kolkata). Scope: actual files under `D:\payday`, dependency tree, original and expanded tests, isolated production browser runs, official Hermes references and unpaid endpoints. No financial signature, payment, swap or payout was executed. The owner chose to perform wallet setup and preflight personally.
 
 ## Verdict

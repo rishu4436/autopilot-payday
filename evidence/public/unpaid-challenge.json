@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "evidenceClass": "unpaid_http_402",
+  "at": "2026-11-10T16:06:32.640Z",
+  "status": 402,
+  "url": "https://hermes.swap.io/v1/swap/quote",
+  "method": "POST",
+  "publicAddressIsPlaceholder": true,
+  "request": {
+    "input": {
+      "token": "So11111111111111111111111111111111111111112",
+      "amount": "1000000",
+      "chainKey": "sol"
+    },
+    "output": {
+      "token": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "chainKey": "sol"
+    },
+    "userAddress": "11111111111111111111111111111111",
+    "slippageBps": 50
+  },
+  "challenge": {
+    "x402Version": 1,
+    "accepts": [
+      {
+        "scheme": "exact",
+        "network": "solana",
+        "maxAmountRequired": "3007",
+        "resource": "https://hermes.swap.io/v1/swap/quote",
+        "description": "Paid swap API (routhex): quote and build unsigned transactions; caller signs and broadcasts",
+        "mimeType": "application/json",
+        "payTo": "BPz2u6eoWLervxEqfpsMCVmKk7h6fEVsd7L5rvEibMfD",
+        "maxTimeoutSeconds": 60,
+        "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "extra": {
+          "feePayer": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
+        }
+      },
+      {
+        "scheme": "exact",
+        "network": "base",
+        "maxAmountRequired": "3007",
+        "resource": "https://hermes.swap.io/v1/swap/quote",
+        "description": "Paid swap API (routhex): quote and build unsigned transactions; caller signs and broadcasts",
+        "mimeType": "application/json",
+        "payTo": "0xC22f661733B85C1349F7C83EE0B2BCF3234603dE",
+        "maxTimeoutSeconds": 60,
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "extra": {
+          "name": "USD Coin",
+          "version": "2"
+        }
+      }
+    ]
+  }
+}

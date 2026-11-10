@@ -89,13 +89,26 @@ test("contributor search and theme controls work", async ({ page }) => {
 
 test("all presentation scenes stay explicitly simulated", async ({ page }) => {
   await goto(page, "/presentation");
-  await expect(page.getByText(/No paid quote, live swap or live payout evidence/)).toBeVisible();
+  await expect(page.getByText(/No verified paid quote/)).toBeVisible();
   for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Contributors get USDC" })).toBeVisible();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("heading", { name: "The owner authorizes the swap" })).toBeVisible();
   await expect(page.getByText(/fixture, never a market quote/)).toBeVisible();
   await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByText(/No paid response has been demonstrated/)).toBeVisible();
+});
+
+test("presentation distinguishes the actual unpaid challenge from a paid receipt", async ({ page }) => {
+  await goto(page, "/presentation");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText(/Actual Swap.io HTTP 402 captured/)).toBeVisible();
+  await expect(page.getByText(/placeholder address. No payment occurred/)).toBeVisible();
+  await page.getByText("Actual unpaid request", { exact: true }).click();
+  await expect(page.locator("pre")).toContainText('"amount": "1000000"');
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("link", { name: /Solscan/ })).toHaveCount(0);
   await expect(page.getByText(/No paid response has been demonstrated/)).toBeVisible();
 });
 

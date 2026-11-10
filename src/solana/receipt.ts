@@ -10,8 +10,9 @@ export async function verifySettlement(rpc: Connection, signature: string, plan:
   const status = (await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
   if (!status || status.err || !["confirmed", "finalized"].includes(status.confirmationStatus || "")) throw new Error("Payment is not confirmed; settlement remains uncertain");
   const tx = await rpc.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
-  if (!tx?.meta || tx.meta.err || !Buffer.from(tx.transaction.message.serialize()).equals(Buffer.from(expectedMessage))) throw new Error("Settlement message mismatch or failed transaction");
-  validatePaymentTransaction(new VersionedTransaction(tx.transaction.message), plan);
+  if (!tx?.meta || tx.meta.err || tx.transaction.signatures[0] !== signature || !Buffer.from(tx.transaction.message.serialize()).equals(Buffer.from(expectedMessage))) throw new Error("Settlement message mismatch or failed transaction");
+  // Receipt reconciliation must remain possible after the signing plan expires.
+  validatePaymentTransaction(new VersionedTransaction(tx.transaction.message), plan, Date.parse(plan.createdAt));
   if (tx.meta.innerInstructions?.some((group) => group.instructions.length)) throw new Error("Unexpected inner payment instructions");
   const keys = tx.transaction.message.staticAccountKeys;
   const mint = new PublicKey(USDC_MINT);

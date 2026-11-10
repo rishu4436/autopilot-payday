@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { ComputeBudgetProgram, Connection, Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { createCloseAccountInstruction, createSetAuthorityInstruction, AuthorityType, createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
-import { planHash, QUOTE_URL, type PaidPlan, validatePlan, validateTerms } from "../hermes/paid-plan";
+import { HERMES_PAYEE, HERMES_FEE_PAYER, planHash, QUOTE_URL, type PaidPlan, validatePlan, validateTerms } from "../hermes/paid-plan";
 import { USDC_MINT, WSOL_MINT } from "../domain/tokens";
 import { validatePaymentTransaction } from "./payment-guard";
 import { verifySettlement } from "./receipt";
@@ -13,9 +13,11 @@ import { PaymentJournal } from "../../services/x402-signer/journal";
 import { authorizeLocalRequest } from "../../services/x402-signer/http-policy";
 import { buildUsdcPayouts } from "./payout";
 import { createRequire } from "node:module";
+import { verifyPaidEvidence } from "../hermes/evidence";
+import { createHash } from "node:crypto";
 
 const pub = (n: number) => Keypair.fromSeed(new Uint8Array(32).fill(n)).publicKey;
-const payer = pub(11), payee = pub(12), feePayer = pub(13), mint = new PublicKey(USDC_MINT);
+const payer = pub(11), payee = new PublicKey(HERMES_PAYEE), feePayer = new PublicKey(HERMES_FEE_PAYER), mint = new PublicKey(USDC_MINT);
 function plan(): PaidPlan {
   const now = Date.now();
   return validatePlan({ id: crypto.randomUUID(), createdAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 60_000).toISOString(), payer: payer.toBase58(), url: QUOTE_URL, method: "POST", body: { input: { token: WSOL_MINT, amount: "10000000", chainKey: "sol" }, output: { token: USDC_MINT, chainKey: "sol" }, userAddress: payer.toBase58(), slippageBps: 50 }, terms: { scheme: "exact", network: "solana", asset: USDC_MINT, amount: "3007", payTo: payee.toBase58(), feePayer: feePayer.toBase58(), resource: QUOTE_URL }, maxAtomic: "10000", dailyLimitAtomic: "50000", reserveAtomic: "100000" });
@@ -130,7 +132,7 @@ describe("independent chain receipt validation", () => {
     const p = plan(), tx = transaction(), keys = tx.message.staticAccountKeys;
     const source = keys.findIndex((k) => k.equals(getAssociatedTokenAddressSync(mint, payer))), dest = keys.findIndex((k) => k.equals(getAssociatedTokenAddressSync(mint, payee)));
     const balance = (index: number, owner: string, amount: string) => ({ accountIndex: index, mint: USDC_MINT, owner, uiTokenAmount: { amount, decimals: 6, uiAmount: null } });
-    const record = { slot: 123, transaction: { message: tx.message }, meta: { err: null, innerInstructions: [], preBalances: keys.map(() => 1000000), postBalances: keys.map(() => 1000000), preTokenBalances: [balance(source, p.payer, "1000000"), balance(dest, p.terms.payTo, "100")], postTokenBalances: [balance(source, p.payer, "996993"), balance(dest, p.terms.payTo, "3107")] } };
+    const record = { slot: 123, transaction: { message: tx.message, signatures: [bs58.encode(new Uint8Array(64).fill(5))] }, meta: { err: null, innerInstructions: [], preBalances: keys.map(() => 1000000), postBalances: keys.map(() => 1000000), preTokenBalances: [balance(source, p.payer, "1000000"), balance(dest, p.terms.payTo, "100")], postTokenBalances: [balance(source, p.payer, "996993"), balance(dest, p.terms.payTo, "3107")] } };
     const status = { value: [{ err: null, confirmationStatus: "confirmed" }] };
     const rpc = { getSignatureStatuses: vi.fn(async () => status), getTransaction: vi.fn(async () => record) };
     return { p, tx, record, rpc, status, signature: bs58.encode(new Uint8Array(64).fill(5)) };
@@ -147,5 +149,23 @@ describe("independent chain receipt validation", () => {
     const e = evidence(); e.record.meta.postTokenBalances[1]!.uiTokenAmount.amount = "3108";
     await expect(verifySettlement(e.rpc as unknown as Connection, e.signature, e.p, e.tx.message.serialize())).rejects.toThrow("movement");
     await expect(verifySettlement(e.rpc as unknown as Connection, e.signature, e.p, new Uint8Array([1]))).rejects.toThrow("message mismatch");
+  });
+  it("reconciles an expired approval without reopening its signing window", async () => {
+    const e = evidence(); e.p.createdAt = new Date(Date.now() - 3600_000).toISOString(); e.p.expiresAt = new Date(Date.now() - 3590_000).toISOString();
+    expect(() => validatePlan(e.p)).toThrow("expired");
+    await expect(verifySettlement(e.rpc as unknown as Connection, e.signature, e.p, e.tx.message.serialize())).resolves.toMatchObject({ signature: e.signature });
+  });
+  it("refuses a substituted chain signature even with matching-looking movements", async () => {
+    const e = evidence(); e.record.transaction.signatures[0] = bs58.encode(new Uint8Array(64).fill(6));
+    await expect(verifySettlement(e.rpc as unknown as Connection, e.signature, e.p, e.tx.message.serialize())).rejects.toThrow("message mismatch");
+  });
+  it("reverifies public paid artifacts and refuses self-asserted/fabricated receipts", async () => {
+    const e = evidence(), message = Buffer.from(e.tx.message.serialize());
+    const rpc = { ...e.rpc, getGenesisHash: async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" } as unknown as Connection;
+    const record = { schemaVersion: 1, evidenceClass: "verified_chain", at: new Date().toISOString(), plan: e.p, messageBase64: message.toString("base64"), messageHash: createHash("sha256").update(message).digest("hex"), receiptHeader: Buffer.from(JSON.stringify({ success: true, transaction: e.signature })).toString("base64"), responseSha256: "0".repeat(64), evidence: { signature: e.signature, slot: 123, solscan: `https://solscan.io/tx/${e.signature}` }, quotes: [{ provider: "synthetic-test-only", inputAtomic: "1000000", outputAtomic: "10000", minOutAtomic: null }] };
+    await expect(verifyPaidEvidence(record, rpc)).resolves.toMatchObject({ evidenceClass: "verified_chain" });
+    e.status.value[0]!.confirmationStatus = "processed";
+    await expect(verifyPaidEvidence(record, rpc)).rejects.toThrow("not confirmed");
+    await expect(verifyPaidEvidence({ ...record, messageHash: "1".repeat(64) }, rpc)).rejects.toThrow("mismatch");
   });
 });

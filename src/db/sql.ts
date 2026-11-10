@@ -1,4 +1,18 @@
 export const SCHEMA_SQL = `
+create table if not exists treasury_attempts (
+  id text primary key, org_id text not null, batch_id text, proposal_hash text not null,
+  message_hash text not null, manifest text not null, approval_signature text not null,
+  state text not null check (state in ('PREPARED','SIGNED','UNKNOWN','CONFIRMED','FAILED')),
+  signed_base64 text, signature text unique, evidence text,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique(org_id, proposal_hash), unique(org_id, message_hash)
+);
+alter table treasury_attempts add column if not exists batch_id text;
+create table if not exists treasury_allocation_claims (
+  org_id text not null, milestone_id text not null, attempt_id text not null references treasury_attempts(id),
+  allocation_id text not null, recipient text not null, amount_atomic text not null,
+  primary key(org_id, milestone_id), unique(org_id, allocation_id)
+);
 create table if not exists organizations (
   id text primary key,
   name text not null,

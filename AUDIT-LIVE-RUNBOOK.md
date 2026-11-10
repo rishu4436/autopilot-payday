@@ -1,113 +1,116 @@
-# Local owner-operated paid quote and optional treasury tests
+# Owner-operated x402 quote procedure
 
-Audit date: 2026-11-10 (Asia/Kolkata). No paid request, financial signature, swap or payout was performed during this audit. The owner elected to manage wallet preflight personally. These instructions are a procedure, not authorization. Web payments, provider swaps, and payroll broadcasting are quarantined in code.
+Updated 2026-11-10. This procedure authorizes no payment. No funded signer, real paid quote, swap or payroll transfer has been run in this audit. The owner chose to handle wallet setup and public balance checks personally. The web payment relay, live swaps, live payout preparation and broadcaster remain quarantined in code.
 
-## 1. Prepare the machine and dedicated wallet
+## 1. Private local setup
 
-Use a dedicated low-value Solana mainnet wallet. Create or inspect it yourself in a local wallet or the installed Solana CLI. Never paste its key, mnemonic, signer token, or keypair JSON into chat. Never use the treasury key as the API payer. Record and compare the full public payer and treasury addresses on the local machine. The quote's `userAddress` identifies the treasury to quote for; it does not authorize swapping.
+Use a dedicated low-value mainnet API payer, separate from the treasury. Never paste a mnemonic, private key, keypair JSON or signer token into chat. Inspect the full public addresses yourself. Create/fund the wallet and its canonical mainnet USDC ATA through your own wallet procedure; funding and account creation are separate operations outside this approval.
 
-Keep the private keypair, journal and approval plan outside the repository, OneDrive, and other synced folders. On Windows create a private directory and restrict its ACL to the current account:
+Keep keys, plans, results and the one persistent journal outside the checkout and synced folders. In PowerShell:
 
 ```powershell
+Set-Location D:\payday
 $privateDir = Join-Path $env:USERPROFILE '.payday-private'
 New-Item -ItemType Directory -Path $privateDir -Force | Out-Null
 $account = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 icacls $privateDir /inheritance:r /grant:r "${account}:(OI)(CI)F"
 ```
 
-Save the wallet's local keypair as `payer.json` there using your wallet's supported local procedure. Inspect permissions on the file too. The audit does not generate or fund it. Manually provision its canonical USDC ATA if absent and fund it only after your own transfer approval. Canonical mainnet USDC is `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (6 decimals). A small balance such as 0.15 USDC covers the 0.10 USDC reserve plus the hard maximum 0.01 USDC quote charge; funding and account creation have their own costs and are outside this procedure. Hermes API payments use a facilitator fee payer; the API payer must not spend SOL.
+Save your locally managed keypair as `payer.json` inside that directory and inspect its ACL. Windows does not enforce POSIX mode bits; the real ACL matters. The audit never creates, reads or funds that keypair. Public canonical USDC is `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (6 decimals).
 
-## 2. Reproduce the no-spend checks
+## 2. Exact next action: read-only owner preflight
 
-```powershell
-Set-Location D:\payday
-pnpm install --frozen-lockfile
-pnpm exec playwright install chromium
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm test:e2e
-pnpm live:discover
-pnpm live:challenge
-```
-
-The E2E configuration starts production Payday servers on **127.0.0.1:3100** and **127.0.0.1:3101**, each with its own new temporary database. It refuses server reuse. Port 3000 was occupied by a different repository during this audit; do not assume that `localhost:3000` is Payday. Inspect `Get-NetTCPConnection -State Listen` and the owning process before manual recording. Bind manual servers explicitly to loopback and use one canonical origin. Local HTTP production runs need `APP_ORIGIN=http://127.0.0.1:3100` and `COOKIE_SECURE=false`; the exception is restricted to HTTP loopback. Hosted HTTPS keeps secure cookies. Do not expose a signer through any proxy or tunnel.
-
-## 3. Prepare one quote without a secret or payment
-
-Use a public address only in this terminal. `tsx` scripts read process environment; they do not load `.env.local` automatically.
+Use public addresses only. CLI scripts read this terminal's environment, not `.env.local` automatically.
 
 ```powershell
 $env:LIVE_OPERATIONS = 'false'
-$env:X402_PAYER_PUBLIC_KEY = '<full public API payer address>'
-$env:TREASURY_PUBLIC_KEY = '<full public treasury address>'
+$env:X402_PAYER_PUBLIC_KEY = '<your full public API payer address>'
+$env:TREASURY_PUBLIC_KEY = '<your full public treasury address>'
 $env:SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com'
-$env:X402_APPROVED_PLAN = Join-Path $privateDir 'quote-plan.json'
+$env:X402_APPROVED_PLAN = Join-Path $privateDir ("quote-plan-" + [Guid]::NewGuid().ToString() + '.json')
 pnpm live:prepare-quote
 ```
 
-This checks mainnet genesis, reads payer USDC, fetches free discovery, and sends an **unpaid** quote for 0.01 SOL with 50 bps slippage. That input amount is only a quote parameter; no SOL trade is executed. It pins the exact 402 charge, canonical mint/network, full payee, facilitator fee payer, endpoint, request body, expiration and policy, and writes a canonical SHA-256 plan hash. Raw discovery/challenge evidence is saved beside the plan. No keypair is loaded. A preexisting output file is never overwritten.
+This verifies mainnet genesis, the owned/unfrozen payer USDC ATA and balance, reads free official discovery, captures a fresh unpaid challenge and prepares a **0.001 SOL to USDC quote request at 50 bps**. The SOL amount is a quote parameter; it is never traded. It saves the exact request, terms, 15-minute expiry, budget policy, evidence and canonical SHA-256 plan hash with no overwrite. No secret is loaded or signature made. Insufficient balance, a missing ATA or changed discovery/pins refuses preparation.
 
-Review all displayed plan fields and saved evidence. Verify the full addresses independently against official discovery and your wallet. Hard signer ceilings are **10,000 atomic USDC (0.01 USDC) per call** and **50,000 atomic USDC (0.05 USDC) per UTC day**, with a **100,000 atomic USDC (0.10 USDC) payer reserve** in generated plans. The exact approved charge is `terms.amount`, typically much lower. The signer requires exact agreement with that amount, not merely an amount under the cap. Discovery base price is not necessarily the actual request price.
+Independent hard ceilings: **10,000 atomic USDC (0.01) per request; 50,000 (0.05) per UTC day; 100,000 (0.10) over the journal's lifetime; and at least 100,000 (0.10) remaining USDC reserve.** Generated plans set their actual per-request maximum to the exact challenge charge. The public capture in this checkout asked for **3,007 atomic USDC (0.003007)**; that observation does not approve or fix a future price. The payer must have at least the fresh exact charge plus the reserve. API payment must not debit its SOL.
 
-**STOP FOR SEPARATE OWNER APPROVAL.** Record approval of the full plan hash, payer, payee, network/mint, exact charge, maximum, UTC daily limit and expiry. The audit and a prior unpaid challenge are not approval. Plan lifetime is at most 15 minutes. If terms change or the plan expires, prepare a new plan file, review it, and obtain fresh approval.
+Pinned quote endpoint: `POST https://hermes.swap.io/v1/swap/quote`. Pinned payee: `BPz2u6eoWLervxEqfpsMCVmKk7h6fEVsd7L5rvEibMfD`. Pinned facilitator fee payer: `2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4`. An address rotation requires a new code review; do not loosen the pins to make a test pass.
 
-## 4. Only after approval: start the one-plan local signer
+## 3. Mandatory exact approval checkpoint
 
-In the private signer terminal, set the same approved plan and hash. Set the keypair path only here. Generate a random bearer token locally; do not print, commit or paste it into chat. Supply the same token to the local CLI terminal through a private local channel. Never put this token in `.env.local`, browser variables, URLs or command history literals. Environment variables can be read by other processes running as your account; use a trusted machine.
+**STOP after preparation.** Review the saved public plan and balance locally. Obtain separate approval for: “One paid API quote only, plan ID and full SHA-256 hash [values], API payer [full address], treasury quote address [full address], mainnet canonical USDC, payee and facilitator [full addresses], exact and maximum charge [fresh amount], UTC-day/lifetime limits, reserve and expiration [values]. No swap or contributor payout.”
+
+The approved hash binds all those fields and the entire request. A generic “continue,” an unpaid 402, or this engineering task is not financial authorization. Expired plans, changed terms or any replacement plan require fresh exact approval. Do not start the signer yet merely because preparation succeeded.
+
+## 4. Only after separate approval: one-plan signer
+
+In the private signer terminal, use the exact approved file/hash. Set a trustworthy mainnet read-only verification RPC, preferably independent of the SDK's RPC provider. Generate the bearer capability locally and transfer it privately to the CLI terminal; never print it or put it in the web environment, URL or literal command history.
 
 ```powershell
+$env:X402_APPROVED_PLAN_SHA256 = '<separately approved full hash>'
 $env:PAYER_KEYPAIR = Join-Path $privateDir 'payer.json'
-$env:X402_APPROVED_PLAN = Join-Path $privateDir 'quote-plan.json'
-$env:X402_APPROVED_PLAN_SHA256 = '<separately approved plan hash>'
 $env:X402_JOURNAL_DIR = Join-Path $privateDir 'journal'
+$env:SOLANA_VERIFICATION_RPC_URL = '<trusted independent mainnet HTTPS RPC URL>'
 $env:X402_SIGNER_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
 $env:LIVE_OPERATIONS = 'true'
 pnpm signer --enable-paid-quote
 ```
 
-The process binds **only 127.0.0.1:8787**. Authenticate `/health` as well as `/v1/paid`. Any Origin, browser fetch metadata, forwarded headers, noncanonical Host or missing token is rejected. Requests accept only the approved plan ID; caller-controlled URLs, payees, methods, amounts and bodies are refused. The web app cannot relay payments to it.
+It binds only `127.0.0.1:8787`. All endpoints, including health, require the capability. Exact peer/Host, no browser Origin/fetch metadata, no forwarding headers, request size/time limits and one in-flight call apply. The caller can submit only the approved plan ID. The keypair public address must equal the approved payer. Both RPCs must report mainnet genesis. The signer accepts only the narrowly decoded three-instruction gasless USDC payment, validates the actual blockhash, simulates without replacing it, persists the message before signing, and allows one paid HTTP dispatch.
 
-Use the same private journal directory across starts and plans. Its exclusive lock prevents cooperating signer processes from sharing a budget concurrently. A crash leaves `signer.lock` intentionally. Do not delete the lock merely to retry; first inspect the journal and chain. Resetting/deleting/changing the journal bypasses historical accounting and is outside the safety model.
+Use **the same journal directory forever**, including after failures and across plans/days. A cross-process signer lock, short journal lock, fsync'd append-only hash chain, per-plan single use, daily/lifetime accounting and unresolved-attempt hold are enforced. Version-1, truncated or corrupted journals fail closed; never automatically migrate or reset them. This chain detects corruption, not a malicious OS account that can rewrite history.
 
-## 5. Only after approval: execute once from the local CLI
+## 5. Only after approval: execute once
 
-In the second terminal set the same plan, approved hash, private token and `LIVE_OPERATIONS=true`. Do not set `PAYER_KEYPAIR` in this terminal. Choose a new result file so prior evidence is not overwritten.
+In the local CLI terminal set the same public plan, approved hash, private bearer capability and live opt-in. Do not set `PAYER_KEYPAIR` there. Choose a new private result file:
 
 ```powershell
-$env:X402_APPROVED_PLAN = Join-Path $privateDir 'quote-plan.json'
-$env:X402_APPROVED_PLAN_SHA256 = '<separately approved plan hash>'
 $env:X402_RESULT_FILE = Join-Path $privateDir 'paid-quote-result.json'
 $env:LIVE_OPERATIONS = 'true'
-# X402_SIGNER_TOKEN must already match the private signer process.
 pnpm live:paid-quote --i-understand-this-spends-usdc
 ```
 
-The signer validates terms again, reserves the exact charge with fsync before signing, checks payer balance, decodes the SDK payment's instructions, checks two required signers, source/destination ATAs, USDC amount and decimals, and compute limits. Account closures, authority changes, SOL transfers, lookup tables and extra instructions are rejected. It simulates before signing. It never signs a provider swap or payout.
+The command validates the private result path and refuses overwrite before requesting payment. Success requires a genuine API receipt, confirmed/finalized RPC status, the identical approved message and transaction signature, exact canonical USDC source debit and payee credit, and no payer SOL change. A malformed/failed quote after settlement never erases the verified payment. The private journal's `evidence` directory retains the raw response and verified record separately. A usable paid API response is not a swap execution.
 
-## 6. Reconcile independently
+## 6. Uncertainty and crash recovery
 
-Success requires a 200 with a receipt **and** RPC confirmation, a transaction message identical to the signed message, the exact payer debit/payee credit in canonical USDC, and no API payer SOL change. Save the result's actual `evidence.signature`, `evidence.slot` and `evidence.solscan` URL. Inspect that real Solscan transaction and compare addresses and amounts. Never construct a video receipt from a simulated signature or a fabricated transaction ID.
+After any timeout, connection loss, missing receipt, failed verification, disk error or crash: **do not retry**. A reserved/prepared/signed/unknown attempt holds all later payments. A 409 or expired blockhash is not proof of nonpayment. Preserve the entire directory and inspect the payer ATA's transaction history using a trusted independent RPC/explorer. Candidate signatures must match the persisted exact message and amounts.
 
-A timeout, missing receipt, lost connection, RPC failure, malformed response or crash after reservation is **uncertain**. Do not rerun the command, create a new plan to work around the hold, reset a budget, or assume an error means no charge. The journal blocks reused and unresolved plans even after restart and across UTC days. Preserve original message hashes, timestamps and records. Read the payer ATA transaction history and inspect candidate transactions independently. Confirm a matching message hash, mint, amount, source/destination, slot and finalized status. A missing transaction from a single RPC is not proof of no settlement. Use another trustworthy RPC and wait past the original transaction's valid blockhash horizon. Manual journal reconciliation has no automated CLI in this version; involve a developer to append a reviewed outcome without deleting history. Any subsequent financial attempt needs fresh explicit approval.
+Read-only positive reconciliation, including after plan expiry:
 
-Stop the signer cleanly with Ctrl+C after the result. Remove private token variables from both terminals. Keep the journal and receipt as private evidence. Do not enable web financial paths.
+```powershell
+pnpm live:reconcile --signature <independently-observed-transaction-signature>
+```
 
-The app's demo pause switch does not control this standalone process. Stop the signer itself to revoke its ability to execute the approved local plan. A new plan and fresh owner approval are required after expiry or changed terms.
+Set `X402_APPROVED_PLAN` and the original `X402_JOURNAL_DIR` first. If the receipt signature was already journaled, `pnpm live:reconcile` can use it. Optional `X402_RECONCILIATION_FILE` saves a new private result. Only a positively verified settlement can close the hold; a single RPC's missing transaction never clears it. `pnpm live:reconcile --recover-quote` can additionally reconstruct a missing verified artifact from the **existing original successful API response** captured before RPC verification; it refuses overwritten evidence, receipt mismatch or malformed quotes. It cannot recover a response that was never captured, invent quotes, refund limits or authorize another payment. Reserved attempts without a persisted message or unresolvable unsigned/receiptless outcomes require manual forensic review; there is no automatic negative reconciliation.
 
-## 7. Optional very small swap: blocked pending engineering prerequisites
+A crash may leave process locks. Stop all signer processes first. Then the following checks journal integrity and lock metadata and refuses deletion if any recorded PID exists, including PID reuse:
 
-The current app deliberately refuses live swap building/signing/broadcast. **Do not remove the quarantine as a demo shortcut.** Before a future separately approved test:
+```powershell
+pnpm live:recover-lock --recover-dead-process
+```
 
-1. Implement and independently review provider-specific instruction decoders, resolved lookup table validation and the exact allowlist of programs and instructions. Reject unknown accounts, token transfers, account closure and authority changes. Bind source/destination token accounts, authority, mints, maximum SOL/token input, fees, minimum USDC output and slippage to an immutable approved transaction message.
-2. Simulate the complete decoded transaction and review all balance movements. Re-read balances/reserves, policy, allowlists, quote expiry and last-valid block height immediately before approval. A successful simulation alone is not authorization.
-3. Owner reviews a fresh small quote, for example at most 0.001 SOL input, actual current expected USDC output and a 50 bps ceiling. This is a **separate** swap approval; paid quote approval never authorizes a trade. Account for fees/rent, and reject the test if minimum sizes or reserves cannot support it.
-4. Persist attempt ID, approved proposal hash, exact signed bytes, deterministic transaction signature, blockhash validity and allocations durably **before** broadcast. Never automatically re-sign/rebuild after a network error. Serialize concurrent execution with durable uniqueness.
-5. After separately authorized execution, reconcile RPC transaction error/status, input/output token changes, fee/rent and finality independently; record its own real Solscan URL.
+It removes only dead-process locks, never journal rows, holds or budgets. Old/invalid lock metadata requires manual review. Recovery assumes a trusted local account and no concurrent operator racing the command.
 
-## 8. Optional USDC payout: a third separate approval
+## 7. Import and present genuine evidence
 
-Live payout broadcasting and durable recovery are not implemented and remain blocked. For a future reviewed implementation, use one approved allowlisted recipient and at most 0.01 USDC after checking reserves, actual fees/rent and recipient ownership. Lock milestone amount and full recipient address. Decode every instruction in each chunk. Uniquely bind each milestone allocation to one attempt and each chunk to one signature before sending. Get **separate payout approval** for the exact list, amounts and fees. Confirm exact canonical USDC credit and debit from chain evidence. A partial/unknown chunk keeps its allocations locked; reconcile it before permitting a new authorization. Only a definitive failed/expired unlanded attempt can be replaced. Confirmed allocations must never be included in another chunk. Record a separate payout Solscan URL.
+After an actual successful paid quote, set these to the signer-created files, using the actual plan ID:
 
-Until those prerequisites and approvals exist, use the labeled simulated payroll video and unpaid HTTP 402 evidence. Do not claim live integration or production readiness.
+```powershell
+$env:X402_VERIFIED_RECORD = Join-Path $env:X402_JOURNAL_DIR 'evidence\<plan-id>-verified.json'
+$env:X402_RAW_RESPONSE = Join-Path $env:X402_JOURNAL_DIR 'evidence\<plan-id>-response.json'
+pnpm live:import-evidence
+```
+
+The importer checks the response hash, quotes, receipt and fresh on-chain settlement, and refuses overwrite of `evidence/public/paid-quote.json`. It never reads a keypair. `/presentation` displays paid quotes and a real Solscan receipt only after another chain verification. If RPC verification is unavailable, it says so and hides the completed-payment claim. Public evidence contains addresses and unsigned message bytes; inspect it before sharing. Raw provider payloads, payment authorization headers, tokens and keys remain private. A local response hash documents the trusted client's capture; it is not a provider-signed market-price attestation.
+
+Refresh public unpaid evidence independently with `pnpm live:challenge --save-evidence`. That command uses a placeholder address and spends nothing. Stop the signer with Ctrl+C after the experiment and remove token variables from both terminals. The demo pause button does not control this independent process.
+
+## 8. Live swaps and payroll remain blocked
+
+The new instruction/effects guard and SQL ledger are offline engineering components. They decode checked USDC payouts and a restricted Jupiter v6 exact-in/single-Ray­dium route ABI, reject unknown programs/instructions, unresolved lookup tables, authority changes and extra asset movement, bind immutable owner-signed proposals/messages, hold allocation claims, persist signed bytes/signatures before any possible future dispatch, and reconcile finalized simple payroll outcomes including partial success. There is **no broadcaster or web route connected to the ledger**.
+
+No production pool-account profile is approved. The read-only `treasury-rpc.ts` adapter collects account/fee/rent/blockhash data, pins a minimum simulation slot, checks post-simulation accounts and refuses incomplete or parsed-only CPI summaries. It does not broadcast or expose a web endpoint. Real provider transaction review, lookup table resolution, expanded byte-level CPI support where a node supplies only parsed summaries, swap settlement effects, production provisioning and a new independent security review are still prerequisites. Synthetic pool profiles in tests are never deployable approvals. Existing live guards remain unconditional even if environment flags are changed. Any future swap and any future payout require their own exact owner approvals, distinct from buying an API quote.
+
+Verification commands: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:e2e`, `pnpm audit`. Production browser tests use isolated temporary databases on loopback ports 3100/3101 and refuse server reuse. Do not disturb unrelated applications on port 3000 or other ports. No external Git remote is configured or authorized.

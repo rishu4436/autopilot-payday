@@ -1,0 +1,81 @@
+{
+  "capturedAt": "2026-11-10T06:23:00Z",
+  "note": "GET /v1/info is free. basePrice is the published floor. A request's binding price is its own HTTP 402 maxAmountRequired. Status is listed as paid x402 here; the older quickstart example still shows an unpaid poll.",
+  "service": "swap-io-hermes",
+  "description": "Paid swap API for users and AI agents, monetized per request via x402. Proxies the routhex routing engine.",
+  "docs": "https://hermes.swap.io/llms.txt",
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/v1/swap/quote",
+      "operation": "quote",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3000",
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "solana",
+          "maxAmountRequired": "3000",
+          "resource": "https://hermes.swap.io/v1/swap/quote",
+          "payTo": "BPz2u6eoWLervxEqfpsMCVmKk7h6fEVsd7L5rvEibMfD",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "maxTimeoutSeconds": 60,
+          "extra": { "feePayer": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/swap/quote-2.0",
+      "operation": "quote-2.0",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3259"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/swap/build-tx",
+      "operation": "build-tx",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3000",
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "solana",
+          "maxAmountRequired": "3000",
+          "resource": "https://hermes.swap.io/v1/swap/build-tx",
+          "payTo": "BPz2u6eoWLervxEqfpsMCVmKk7h6fEVsd7L5rvEibMfD",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "maxTimeoutSeconds": 60
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/swap/submit-tx",
+      "operation": "submit-tx",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3019"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/transfer/build-tx",
+      "operation": "transfer-build-tx",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3298"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/swap/status",
+      "operation": "status",
+      "payment": "x402",
+      "asset": "USDC",
+      "basePrice": "3000"
+    },
+    { "method": "GET", "path": "/v1/info", "payment": "none" }
+  ]
+}

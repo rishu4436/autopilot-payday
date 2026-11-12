@@ -5,6 +5,7 @@ import { formatAtomic } from "@/domain/money";
 import { getWorkspace } from "@/server/read";
 import { signerReady } from "@/server/hermes";
 import { rpcUrl } from "@/server/chain";
+import { liveReadiness } from "@/server/live-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +15,22 @@ export default async function SettingsPage() {
   if (data.session.role === "contributor") redirect("/milestones");
   const policy = data.books.policy;
   const owner = data.session.role === "owner";
+  const readiness = liveReadiness(data.books, data.session, process.env);
   return (
     <div className="stack">
       <p className="kicker">Settings and security</p>
       <h1 style={{ margin: 0 }}>The owner holds the keys. The agent holds a checklist.</h1>
       <section className="panel">
-        <p>Web payments, live swaps and payouts are disabled by the audit. The local paid quote procedure requires a separate approved plan. Signer {signerReady() ? "configured" : "not connected to this app"}. RPC host is server-side.</p>
+        <p>Live swaps and payouts require an enabled non-demo workspace, deployment opt-in and your exact wallet approval. Swap.io quote/build payments use the separate local approved-plan procedure. Signer {signerReady() ? "configured" : "not connected to this app"}. RPC host is server-side.</p>
         <p>Current RPC configured: {rpcUrl().startsWith("http") ? "set" : "missing"}. Cluster {process.env.SOLANA_CLUSTER || "mainnet-beta"}.</p>
       </section>
-      {owner && (
+      {owner && data.books.org.mode !== "demo" && <section className="panel stack" data-testid="live-readiness">
+        <div className="row"><h2>Live demo setup</h2><span className="badge">{readiness.every((check) => check.ok) ? "Configuration ready" : "Setup incomplete"}</span></div>
+        <p>These checks describe configuration. Each transaction still requires fresh RPC validation, simulation, sufficient funds and your wallet signatures.</p>
+        <ul>{readiness.map((check) => <li key={check.id}><strong>{check.ok ? "Ready" : "Action needed"}: {check.label}</strong><p>{check.detail}</p></li>)}</ul>
+        <p>Record the exact approval, wallet signature, finalized receipt and its Solscan page. Download verified receipt JSON on Swap or Payroll after settlement. Public addresses are included in the download.</p>
+      </section>}
+      {owner && data.books.org.mode === "demo" && (
         <ActionForm className="panel stack" action={modeAction}>
           <label className="field">Mode
             <select name="mode" defaultValue={data.books.org.mode}>
@@ -35,6 +43,7 @@ export default async function SettingsPage() {
           <button className="btn" type="submit">Save mode</button>
         </ActionForm>
       )}
+      {owner && data.books.org.mode !== "demo" && <section className="panel"><p>Live activation is managed by the local provisioning command and deployment settings. This page cannot arm financial execution. Use the pause control to stop new approvals; reconciliation remains available for submitted transactions.</p></section>}
       {owner ? (
         <ActionForm className="panel stack" action={policyAction}>
           <div className="two">

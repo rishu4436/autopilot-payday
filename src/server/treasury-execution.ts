@@ -91,7 +91,7 @@ export class TreasuryExecutionStore {
     return { confirmed: rows.filter((r) => r.state === "CONFIRMED").length, failed: rows.filter((r) => r.state === "FAILED").length, held: rows.filter((r) => !["CONFIRMED", "FAILED"].includes(r.state)).length };
   }
 }
-async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable<Awaited<ReturnType<Connection["getTransaction"]>>>): Promise<{ solAtomic: string; usdcAtomic: string }> {
+export async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable<Awaited<ReturnType<Connection["getTransaction"]>>>): Promise<{ solAtomic: string; usdcAtomic: string }> {
   const meta = tx.meta!, keys = tx.transaction.message.staticAccountKeys;
   const ownerIndex = keys.findIndex((key) => key.toBase58() === m.proposal.owner);
   if (ownerIndex < 0 || meta.fee > Number(m.proposal.maxFeeLamports) || BigInt(meta.preBalances[ownerIndex]! - meta.postBalances[ownerIndex]!) > BigInt(m.proposal.maxSolDebitLamports) || BigInt(meta.postBalances[ownerIndex]!) < BigInt(m.proposal.solReserveLamports)) throw new Error("Unexpected SOL effects");

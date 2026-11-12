@@ -29,7 +29,8 @@
     "live:prepare-build": "tsx scripts/prepare-paid-build.ts",
     "live:paid-build": "tsx scripts/live-paid-quote.ts --paid-build",
     "live:export-swap-build": "tsx scripts/export-swap-build.ts",
-    "live:provision-org": "tsx scripts/provision-live-org.ts"
+    "live:provision-org": "tsx scripts/provision-live-org.ts",
+    "live:check": "tsx scripts/live-preflight.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

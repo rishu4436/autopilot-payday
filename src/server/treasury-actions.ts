@@ -48,3 +48,6 @@ export async function listTreasuryTransactionsAction(kind: "swap" | "payout", ba
   if (kind !== "swap" && kind !== "payout") return { ok: false as const, message: "Invalid transaction kind" };
   return serviceCall((service, session) => service.list(session, kind, batchId));
 }
+export async function exportTreasuryReceiptAction(attemptId: string) {
+  return serviceCall((service, session) => service.exportReceipt(session, String(attemptId)));
+}

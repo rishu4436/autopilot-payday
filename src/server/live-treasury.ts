@@ -9,7 +9,7 @@ import { inspectTreasuryFromRpc } from "../solana/treasury-rpc";
 import { readCpmmProfiles } from "../solana/raydium-cpmm";
 import { type TreasuryManifest, type TreasuryProposal } from "../solana/treasury-guard";
 import { canonicalUnsignedSwap, validateOriginalBuildResponse, verifyPaidBuildEvidence } from "../hermes/build-evidence";
-import { TreasuryExecutionStore, treasuryApprovalMessage, type TreasuryAttempt } from "./treasury-execution";
+import { TreasuryExecutionStore, treasuryApprovalMessage, verifyTreasuryEffects, type TreasuryAttempt } from "./treasury-execution";
 import { canonicalJson } from "../domain/approval";
 import { USDC_MINT } from "../domain/tokens";
 
@@ -232,5 +232,25 @@ export class LiveTreasuryService {
     await this.principal(session, false, true);
     const rows = await this.db.execute<TreasuryAttempt>(sql`select * from treasury_attempts where org_id=${session.orgId} and draft_id is not null and manifest::jsonb->'proposal'->>'kind'=${kind} and (${batchId ?? ""}='' or batch_id=${batchId ?? ""}) order by created_at desc limit 30`);
     return rows.rows.map((row) => this.view(row));
+  }
+  async exportReceipt(session: Session, id: string) {
+    await this.principal(session, false, true);
+    const row = await this.attempt(session, id), m = JSON.parse(row.manifest) as TreasuryManifest;
+    if (row.state !== "CONFIRMED" || !row.signature) throw new Error("Only a finalized verified transaction can be exported");
+    const rpc = this.deps.verificationRpc;
+    if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+    const chain = await rpc.getTransaction(row.signature, { commitment: "finalized", maxSupportedTransactionVersion: 0 });
+    if (!chain?.meta || chain.meta.err || chain.transaction.signatures[0] !== row.signature || !Buffer.from(chain.transaction.message.serialize()).equals(Buffer.from(m.messageBase64, "base64"))) throw new Error("Finalized chain receipt no longer matches the approved transaction");
+    const balances = await verifyTreasuryEffects(m, chain);
+    return {
+      schema: "autopilot-payday/verified-treasury-receipt/v1", network: "solana-mainnet", commitment: "finalized",
+      verifiedAt: new Date().toISOString(), kind: m.proposal.kind, signature: row.signature,
+      solscan: `https://solscan.io/tx/${row.signature}`, slot: chain.slot, blockTime: chain.blockTime ?? null,
+      treasury: m.proposal.owner, usdcMint: USDC_MINT, feeLamports: chain.meta.fee.toString(),
+      authorizedInputAtomic: m.proposal.maxInputAtomic, inputUnit: m.proposal.kind === "swap" ? "lamports" : "USDC atomic",
+      minimumOutputUsdcAtomic: m.proposal.minOutputAtomic,
+      recipients: m.proposal.allocations.map((a) => ({ address: a.recipient, usdcAtomic: a.amountAtomic })),
+      proposalHash: m.proposalHash, messageHash: m.messageHash, finalizedTreasuryBalances: balances,
+    };
   }
 }

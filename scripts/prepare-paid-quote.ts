@@ -1,4 +1,5 @@
 // Read-only: public address only; no keypair, signature, payment or broadcast.
+import "./load-live-env";
 import { writeFileSync } from "node:fs";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddressSync } from "@solana/spl-token";

@@ -1,5 +1,7 @@
 # Website deployment
 
+For the step-by-step owner-operated mainnet recording setup, see [VERCEL-LIVE-DEMO.md](VERCEL-LIVE-DEMO.md), the private configuration template `deploy/vercel-live.example`, and `pnpm live:check`.
+
 Autopilot Payday is a Next.js website and can be hosted on Vercel with persistent PostgreSQL. The controlled swap/payroll implementation is described in [LIVE-TREASURY.md](LIVE-TREASURY.md). It is disabled by default pending independent review. No deployment, paid operation or mainnet transfer is claimed by these instructions.
 
 ## Read-only host configuration

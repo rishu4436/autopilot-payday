@@ -5,7 +5,7 @@ import { VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { formatAtomic } from "../domain/money";
 import type { TreasuryAttemptView, TreasuryPreview } from "../server/live-treasury";
-import { approveTreasuryDraftAction, listTreasuryTransactionsAction, previewLivePayoutAction, previewLiveSwapAction, reconcileTreasuryTransactionAction, resumeTreasuryTransactionAction, submitSavedTreasuryTransactionAction, submitTreasuryTransactionAction } from "../server/treasury-actions";
+import { approveTreasuryDraftAction, exportTreasuryReceiptAction, listTreasuryTransactionsAction, previewLivePayoutAction, previewLiveSwapAction, reconcileTreasuryTransactionAction, resumeTreasuryTransactionAction, submitSavedTreasuryTransactionAction, submitTreasuryTransactionAction } from "../server/treasury-actions";
 
 const fromBase64 = (text: string) => Uint8Array.from(atob(text), (value) => value.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -37,6 +37,15 @@ export function TreasuryWallet({ kind, batchId, treasury, submissionEnabled, can
     let terminal = false;
     await work(async () => { const result = must(await reconcileTreasuryTransactionAction(id)); terminal = ["CONFIRMED", "FAILED"].includes(result.state); setMessage(`Independent chain reconciliation: ${result.state}.`); });
     if (terminal) window.location.reload();
+  }
+  async function downloadReceipt(id: string) {
+    await work(async () => {
+      const receipt = must(await exportTreasuryReceiptAction(id));
+      const url = URL.createObjectURL(new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a"); link.href = url; link.download = `payday-${kind}-${receipt.signature}.json`; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage("Receipt independently rechecked at finalized commitment and downloaded. It includes the public treasury and recipient addresses.");
+    });
   }
   function assertWallet() {
     if (!wallet.connected || wallet.publicKey?.toBase58() !== treasury) throw new Error("Connect the exact treasury owner wallet shown below before approving or signing");
@@ -100,6 +109,7 @@ export function TreasuryWallet({ kind, batchId, treasury, submissionEnabled, can
     {rows.map((row) => <article key={row.id} className="stack" data-testid="treasury-attempt">
       <div className="row"><span className="badge">{row.state}</span><small>{row.id}</small></div>
       {row.signature && <p style={{ overflowWrap: "anywhere" }}>{row.solscan ? <a href={row.solscan} target="_blank" rel="noreferrer">Verified Solscan receipt: {row.signature}</a> : <>Candidate transaction signature, settlement unverified: {row.signature}</>}</p>}
+      {row.state === "CONFIRMED" && <button type="button" className="btn" disabled={busy} onClick={() => { void downloadReceipt(row.id); }}>Download verified receipt</button>}
       {row.resumable && <button type="button" className="btn" disabled={busy || !submissionEnabled} onClick={() => { void work(async () => { const value = must(await resumeTreasuryTransactionAction(row.id)); setPreview(value); setAttemptId(row.id); setApproved(true); setMessage("Resuming the same immutable approved transaction. No replacement transaction was created."); }); }}>Resume same transaction</button>}
       {row.state === "SIGNED" && <button type="button" className="btn" disabled={busy || !submissionEnabled} onClick={() => { void work(async () => { must(await submitSavedTreasuryTransactionAction(row.id)); setMessage("The durably saved transaction was submitted once. Awaiting reconciliation."); }); }}>Submit saved transaction once</button>}
       {["UNKNOWN", "SIGNED"].includes(row.state) && <button type="button" className="btn" disabled={busy} onClick={() => { void reconcile(row.id); }}>Reconcile on Solana</button>}

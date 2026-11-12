@@ -1,6 +1,6 @@
 # Controlled live swap and payroll implementation
 
-2026-11-12. This extends the historical audit with a managed owner-wallet flow. **No funded wallet, paid API call, mainnet swap or payout has been executed during implementation.** All execution tests use unfunded deterministic wallets and a synthetic loopback RPC. A new independent security review is still required before enabling a real deployment.
+2026-11-12. This extends the historical audit with a managed owner-wallet flow. **No funded wallet, paid API call, mainnet swap or payout has been executed during implementation.** All execution tests use unfunded deterministic wallets and a synthetic loopback RPC. A new independent security review is still required before enabling a real deployment. For the Vercel setup, read-only preflight and owner-operated recording sequence, see [VERCEL-LIVE-DEMO.md](VERCEL-LIVE-DEMO.md).
 
 ## What is implemented
 
@@ -112,7 +112,7 @@ On `/swap`, select that bundle. Keypair files are rejected locally before upload
 
 Commands: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:e2e`, `pnpm test:e2e:live`, `pnpm audit`.
 
-Final local results on 2026-11-12: 176 tests across 12 files, 26 desktop/mobile demo browser checks and one complete synthetic owner-wallet swap/payroll browser check passed. Lint, typecheck, frozen dependency install and production build passed. Dependency audit reported zero advisories across all severities. Default signer startup and the paid-build CLI without explicit spending approval both refused execution. These checks establish local behavior; they do not establish a funded mainnet result or a hosted deployment.
+Final local results on 2026-11-12: 184 tests across 13 files, 26 desktop/mobile demo browser checks and one complete synthetic owner-wallet swap/payroll browser check passed. The treasury browser check also verifies the setup screen and finalized receipt downloads. Lint, typecheck, frozen dependency install and production build passed. Dependency audit reported zero advisories across all severities. Default signer startup and the paid-build CLI without explicit spending approval both refused execution. These checks establish local behavior; they do not establish a funded mainnet result or a hosted deployment.
 
 The additional browser test starts isolated production Next on 127.0.0.1:3102, a **synthetic** Solana RPC on 127.0.0.1:3140 and a new temporary database. An injected deterministic wallet signs real fixture messages; all browser external requests are blocked. It exercises owner login, API build import, exact approval, wallet signing, one dispatch, finality, reload recovery and partial payroll. These fake bank receipts are never exported as competition evidence. The PostgreSQL-driver integration test exercises the installed driver over a local wire endpoint backed by PGlite's PostgreSQL engine; it is not a validation of a native hosted PostgreSQL deployment.
 

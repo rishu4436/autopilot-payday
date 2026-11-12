@@ -1,5 +1,6 @@
 // Administrative local provisioning: public addresses and database writes only.
 // It never requests a keypair, signs a transaction or transfers funds.
+import "./load-live-env";
 import { PublicKey } from "@solana/web3.js";
 import { sql } from "drizzle-orm";
 import { getDb } from "../src/db/client";
@@ -9,6 +10,7 @@ import { TREASURY_RELEASE, treasuryExecutionEnabled } from "../src/server/live-t
 async function main() {
   if (!process.argv.includes("--provision-public-addresses")) throw new Error("Explicit --provision-public-addresses is required; this creates/configures a real non-demo organization");
   const owner = new PublicKey(process.env.TREASURY_PUBLIC_KEY || "").toBase58(), payer = new PublicKey(process.env.X402_PAYER_PUBLIC_KEY || "").toBase58();
+  if (!PublicKey.isOnCurve(new PublicKey(owner).toBytes()) || !PublicKey.isOnCurve(new PublicKey(payer).toBytes())) throw new Error("Treasury and API payer must be signable public wallet addresses");
   const slug = process.env.ORG_SLUG || "payday-live";
   if (!/^[a-z0-9][a-z0-9-]{2,59}$/.test(slug) || owner === payer) throw new Error("Use a valid unique ORG_SLUG and distinct public treasury/API payer addresses");
   const enable = process.argv.includes("--enable-reviewed-live");
@@ -17,9 +19,12 @@ async function main() {
   const db = await getDb();
   const existing = (await db.execute<{ id: string; mode: string }>(sql`select id,mode from organizations where slug=${slug}`)).rows[0];
   if (existing) {
-    if (existing.mode === "demo" || !enable) throw new Error("Existing/demo organization is never repurposed. Use a new slug; enabling an existing non-demo org requires the explicit reviewed flag");
+    if (existing.mode === "demo") throw new Error("Existing demo organization is never repurposed. Use a new slug");
     const member = await db.execute(sql`select m.id from organization_members m join users u on u.id=m.user_id join treasury_accounts t on t.org_id=m.org_id and t.kind='treasury' where m.org_id=${existing.id} and m.role='owner' and u.wallet_address=${owner} and t.address=${owner}`);
     if (member.rows.length !== 1) throw new Error("Configured public treasury owner does not match this non-demo organization");
+    const api = (await db.execute<{ address: string }>(sql`select address from treasury_accounts where org_id=${existing.id} and kind='api_payer'`)).rows;
+    if (api.length !== 1 || api[0]!.address !== payer) throw new Error("Configured API payer does not match this non-demo organization");
+    if (!enable) { console.log(JSON.stringify({ orgId: existing.id, slug, alreadyProvisioned: true, noConfigurationChanged: true, noFinancialTransactionExecuted: true })); return; }
     await db.execute(sql`update organizations set mode='live',live_enabled=true where id=${existing.id} and mode<>'demo'`);
     console.log(JSON.stringify({ orgId: existing.id, slug, enabled: true, noFinancialTransactionExecuted: true })); return;
   }

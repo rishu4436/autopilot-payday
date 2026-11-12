@@ -27,6 +27,7 @@ export function Shell({
   name,
   authMode,
   orgMode,
+  orgName,
   paused,
   pending,
   unread,
@@ -37,6 +38,7 @@ export function Shell({
   name: string;
   authMode: string;
   orgMode: string;
+  orgName: string;
   paused: boolean;
   pending: number;
   unread: number;
@@ -83,7 +85,7 @@ export function Shell({
           <div className="row">
             <button className="btn" type="button" onClick={() => setOpen((value) => !value)}>Menu</button>
             <div>
-              <div className="kicker">Northstar Studio</div>
+              <div className="kicker">{orgName}</div>
               <strong>{name}</strong>
             </div>
           </div>

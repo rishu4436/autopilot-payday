@@ -1,5 +1,7 @@
 # Autopilot Payday
 
+For a real owner-operated competition recording on Vercel, follow [VERCEL-LIVE-DEMO.md](VERCEL-LIVE-DEMO.md). Enter your public wallets and private host configuration locally; `pnpm live:check` checks setup without signing or spending.
+
 Treasury funding and contributor payroll for a small team. An agent watches approved USDC obligations, protects reserves, and buys a Swap.io quote through x402 only when treasury USDC is short. People still authorize every swap and every payout.
 
 The treasury wallet stays with its owner. A separate low-value wallet pays for Hermes API calls. Demo mode runs the same accounting and state machine against a labeled ledger. It does not pretend those rows are Solana transactions.

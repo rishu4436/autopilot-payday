@@ -1,0 +1,21 @@
+# Copy locally to .env.live.local and replace every placeholder privately.
+# This is for operator scripts; never upload the filled file or commit it.
+# Start read-only; see VERCEL-LIVE-DEMO.md for explicit activation after review.
+DATABASE_URL=postgresql://REPLACE_WITH_DEDICATED_DATABASE_URL
+APP_ORIGIN=https://REPLACE_WITH_FINAL_PRODUCTION_DOMAIN
+APP_MODE=live_readonly
+LIVE_OPERATIONS=false
+TREASURY_EXECUTION_ENABLED=false
+TREASURY_REVIEWED_RELEASE=
+ALLOW_DEMO_SEED=false
+COOKIE_SECURE=true
+SOLANA_CLUSTER=mainnet-beta
+SOLANA_RPC_URL=https://REPLACE_WITH_PRIMARY_MAINNET_RPC
+SOLANA_VERIFICATION_RPC_URL=https://REPLACE_WITH_INDEPENDENT_MAINNET_RPC
+NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta
+NEXT_PUBLIC_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+HERMES_BASE_URL=https://hermes.swap.io
+ORG_SLUG=payday-live
+ORG_NAME=Payday Live Demo
+TREASURY_PUBLIC_KEY=REPLACE_WITH_PUBLIC_TREASURY_OWNER
+X402_PAYER_PUBLIC_KEY=REPLACE_WITH_DIFFERENT_PUBLIC_API_PAYER

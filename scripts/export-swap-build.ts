@@ -1,5 +1,6 @@
 // Export only an existing verified unsigned build and its original response.
 // No keypair, signing, merchant request or chain broadcast occurs here.
+import "./load-live-env";
 import { readFileSync, writeFileSync } from "node:fs";
 import { Connection } from "@solana/web3.js";
 import { privatePath } from "../services/x402-signer/private-path";

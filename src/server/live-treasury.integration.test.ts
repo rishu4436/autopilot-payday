@@ -184,4 +184,20 @@ describe("controlled live treasury with synthetic RPC, actual signatures and rea
     const live = new LiveTreasuryService(db, { rpc: bank.rpc as unknown as Connection, verificationRpc: bank.rpc as unknown as Connection, verifyBuild: async () => artifact.record });
     await expect(live.previewSwap(session, artifact)).rejects.toThrow("stale"); expect(bank.sends).toBe(0);
   });
+  it("exports a public receipt only after finality and rechecks the independent chain", async () => {
+    const a = await approved();
+    await expect(service.exportReceipt(session, a.attemptId)).rejects.toThrow("Only a finalized");
+    await service.submitSigned(session, a.attemptId, signedTx(a.preview));
+    await expect(service.exportReceipt(session, a.attemptId)).rejects.toThrow("Only a finalized");
+    await service.reconcile(session, a.attemptId);
+    const receipt = await service.exportReceipt(session, a.attemptId);
+    expect(receipt.commitment).toBe("finalized"); expect(receipt.recipients).toHaveLength(a.preview.manifest.proposal.allocations.length);
+    expect(receipt.messageHash).toBe(a.preview.manifest.messageHash);
+    expect(JSON.stringify(receipt)).not.toContain(a.preview.unsignedBase64);
+    expect(JSON.stringify(receipt)).not.toContain("approval_signature");
+    await expect(service.exportReceipt({ ...session, orgId: "other" }, a.attemptId)).rejects.toThrow();
+    bank.rpc.getTransaction = async () => null;
+    await expect(service.exportReceipt(session, a.attemptId)).rejects.toThrow("Finalized chain receipt");
+    expect(bank.sends).toBe(1);
+  });
 });

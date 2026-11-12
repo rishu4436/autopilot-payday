@@ -1,4 +1,5 @@
 // Public/read-only preflight for a separately approved paid unsigned build.
+import "./load-live-env";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { Connection } from "@solana/web3.js";

@@ -1,3 +1,5 @@
+import { ArrowUpRight, ListChecks, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
 import { redirect } from "next/navigation";
 import { batchAction, batchDecisionAction, partialAction, payoutAction } from "@/server/actions";
@@ -17,16 +19,15 @@ export default async function PayrollPage() {
   const reference = formatAtomic(REFERENCE_SIGNATURE_FEE_LAMPORTS + REFERENCE_TOKEN_ACCOUNT_RENT_LAMPORTS, 9);
   return (
     <div className="stack">
-      <p className="kicker">Payroll</p>
-      <h1 style={{ margin: 0 }}>One payment for each approved obligation</h1>
+      <div className="page-heading"><div><p className="kicker">From approved work to paid work</p><h1>Contributor payroll</h1><p>One payment for each approved obligation. Every recipient reviewed.</p></div><Link className="btn" href="/milestones">Manage milestones <ArrowUpRight size={13} aria-hidden="true" /></Link></div>
       <p>Available {data.usdc(data.books.ledger.availableUsdcAtomic)}. Shortfall {data.usdc(data.books.ledger.shortfallAtomic)}. Reference network cost {reference} SOL per new token account, labeled as a protocol figure in demo. Live mode fetches rent from RPC when a transaction is built.</p>
       {data.session.role !== "auditor" && (
         <ActionForm className="panel stack" action={batchAction}>
-          <strong>Create a batch from approved milestones</strong>
+          <div className="section-heading" style={{ marginBottom: 0 }}><div><span className="kicker">01 · Select obligations</span><h2>Create a batch from approved milestones</h2></div><ListChecks size={19} className="accent-text" aria-hidden="true" /></div>
           {payable.map((row) => (
-            <label key={row.id}><input type="checkbox" name="milestoneId" value={row.id} /> {data.personName(row.contributorId)} · {row.title} · {data.usdc(row.amountAtomic)}</label>
+            <label key={row.id} className="payroll-selection"><input type="checkbox" name="milestoneId" value={row.id} /><span className="person-avatar" aria-hidden="true">{data.personName(row.contributorId).slice(0, 1)}</span><span><strong>{data.personName(row.contributorId)}</strong><small>{row.title}</small></span><span className="num">{data.usdc(row.amountAtomic)}</span></label>
           ))}
-          {payable.length === 0 && <p>No unlocked approved milestones.</p>}
+          {payable.length === 0 && <div className="empty-state"><ShieldCheck size={27} aria-hidden="true" /><strong>No unlocked approved milestones.</strong><p>Approve completed work in Milestones, then return here to prepare payroll.</p></div>}
           <button className="btn primary" type="submit" disabled={payable.length === 0}>Draft batch</button>
         </ActionForm>
       )}

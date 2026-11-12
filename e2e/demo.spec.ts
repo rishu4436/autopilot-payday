@@ -45,8 +45,25 @@ test("all primary pages render without server or browser errors", async ({ page 
     expect(response?.status(), route).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByTestId("mode-badge")).toHaveText("DEMO");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${route} should fit the viewport`).toBe(true);
   }
   expect(errors).toEqual([]);
+});
+
+test("navigation works on narrow screens and identifies the current page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  const menu = page.getByRole("button", { name: "Menu", exact: true });
+  await menu.click();
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+  await nav.getByRole("link", { name: "Treasury", exact: true }).click();
+  await expect(page).toHaveURL(/\/treasury$/);
+  await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Menu", exact: true })).toBeFocused();
 });
 
 test("contributor sees only their milestones and cannot open treasury", async ({ page }) => {

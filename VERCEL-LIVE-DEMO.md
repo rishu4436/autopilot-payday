@@ -1,15 +1,15 @@
 # Record a real Payday transaction on Vercel
 
-The website has owner-wallet swap and USDC payroll execution. This guide prepares a **real mainnet demonstration**. No funded transaction, hosted deployment or independent external security review has been completed by these instructions. Keep a small dedicated demo treasury and approve each exact transaction in your own wallet. Deployment flags permit the signing flow; they never authorize a transfer on their own.
+The website has owner-wallet swap and USDC payroll execution. This guide prepares a **real mainnet demonstration**. These instructions do not establish a funded transaction or an independent external security review. A deployed login page or healthy database alone is insufficient. Keep a small dedicated demo treasury and approve each exact transaction in your own wallet. Deployment flags permit the signing flow; they never authorize a transfer on their own.
 
 ## 1. Configure your host and public wallets
 
-Use Node 22 or newer and the repository's pnpm version (the local checks ran on Node 24). Create a dedicated PostgreSQL database and Vercel project; use a separate database for previews. No GitHub remote is required for a local CLI deployment:
+Use Node 22 or newer, the repository's pnpm version and your installed authenticated Vercel CLI (`vercel --version`). The local checks ran on Node 24. Create a dedicated PostgreSQL database and Vercel project; use a separate database for previews. No GitHub remote is required for a local CLI deployment:
 
 ```powershell
 Set-Location D:\payday
-pnpm dlx vercel@latest login
-pnpm dlx vercel@latest link
+vercel login
+vercel link
 Copy-Item deploy/vercel-live.example .env.live.local
 ```
 
@@ -39,7 +39,7 @@ Provision and deploy:
 
 ```powershell
 pnpm live:provision-org --provision-public-addresses
-pnpm dlx vercel@latest deploy --prod
+vercel deploy --prod
 ```
 
 Provisioning reads public mainnet balances, creates a new real workspace and signs nothing. Re-running with the same exact wallet mappings leaves configuration unchanged. It refuses to promote seeded demo organizations. Open the final production domain, connect your treasury wallet and sign in. Unknown wallets are refused. Settings → **Live demo setup** shows configuration gaps; Treasury → refresh balances reads actual funds.
@@ -62,7 +62,7 @@ The reviewed release marker is an operator acknowledgment, not evidence that an 
 ```powershell
 pnpm live:provision-org --provision-public-addresses --enable-reviewed-live
 pnpm live:check
-pnpm dlx vercel@latest deploy --prod
+vercel deploy --prod
 ```
 
 `live:check` reads configuration, workspace/owner mapping, current public treasury balances, mainnet genesis hashes, unresolved attempts and public Swap.io discovery. It never pays, signs or broadcasts, and does not log RPC/database credentials. It deliberately reports incomplete setup with a nonzero exit status. Its conservative balance check does not replace the exact transaction simulation. After deployment, verify Settings and `/api/health` on the final origin; health should identify Payday and `owner_approved_gated`. A green configuration check is not a claim that a real Swap.io route is supported or a funded transaction succeeded.

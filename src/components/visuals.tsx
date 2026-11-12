@@ -1,55 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowDownUp, Cpu, Fuel, Send, Users } from "lucide-react";
+import { TokenIcon } from "./brand";
 import type { FlowVisual } from "@/domain/machine";
 
-const NODES = [
-  ["sol", "Treasury SOL", 70, 70],
-  ["swap", "Swap", 250, 70],
-  ["usdc", "Treasury USDC", 450, 70],
-  ["pay", "Payroll", 650, 70],
-  ["people", "Contributors", 820, 70],
-  ["reserve", "API reserve", 250, 210],
-  ["x402", "Swap.io x402", 450, 210],
-] as const;
-
 export function FlowMap({ tones, demo }: { tones: FlowVisual; demo: boolean }) {
-  const edges = [
-    [tones.solToSwap, 110, 70, 210, 70],
-    [tones.swapToUsdc, 290, 70, 410, 70],
-    [tones.usdcToPayroll, 510, 70, 610, 70],
-    [tones.payrollToPeople, 690, 70, 780, 70],
-    [tones.reserveToX402, 290, 210, 410, 210],
-  ] as const;
-  return (
-    <section className="panel">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div>
-          <div className="kicker">Treasury flow</div>
-          <strong>Funds and obligations</strong>
-        </div>
-        {demo && <span className="badge amber">DEMO LEDGER</span>}
-      </div>
-      <svg viewBox="0 0 920 280" role="img" aria-label="Treasury flow map" style={{ width: "100%", height: "auto" }}>
-        {edges.map(([tone, x1, y1, x2, y2]) => (
-          <line key={`${x1}-${y1}`} className={`edge ${tone}`} x1={x1} y1={y1} x2={x2} y2={y2} />
-        ))}
-        {NODES.map(([id, label, x, y]) => (
-          <g key={id}>
-            <rect x={x - 58} y={y - 28} width="116" height="56" rx="14" fill="var(--bg-elev-2)" stroke="var(--line)" />
-            <text x={x} y={y + 4} textAnchor="middle" fill="var(--text)" fontSize="12">{label}</text>
-          </g>
-        ))}
-      </svg>
-      <p style={{ color: "var(--muted)" }}>Edges turn complete only after the recorded state says so. A quote is not a payout.</p>
-    </section>
-  );
+  const steps = [
+    { label: "Treasury SOL", tone: tones.solToSwap, icon: <TokenIcon symbol="SOL" /> },
+    { label: "Swap.io route", tone: tones.swapToUsdc, icon: <span className="flow-symbol"><ArrowDownUp size={19} aria-hidden="true" /></span> },
+    { label: "Treasury USDC", tone: tones.usdcToPayroll, icon: <TokenIcon symbol="USDC" /> },
+    { label: "Payroll", tone: tones.payrollToPeople, icon: <span className="flow-symbol"><Send size={18} aria-hidden="true" /></span> },
+    { label: "Contributors", tone: tones.payrollToPeople, icon: <span className="flow-symbol"><Users size={19} aria-hidden="true" /></span> },
+  ];
+  return <section className="panel flow-panel" aria-label="Treasury flow map">
+    <div className="section-heading" style={{ marginBottom: 0 }}><div><div className="kicker">From treasury to team</div><h2>One flow. Explicit approvals.</h2></div><span className={demo ? "badge amber" : "badge cyan"}>{demo ? "DEMO LEDGER" : "RECORDED WORKFLOW"}</span></div>
+    <div className="flow-track">{steps.map((step, i) => <div key={step.label} className={`flow-step ${step.tone}`}><span className="step-number">0{i + 1}</span>{step.icon}<strong>{step.label}</strong></div>)}</div>
+    <div className="flow-caption"><span><Fuel size={13} aria-hidden="true" />Separate x402 reserve · {tones.reserveToX402 === "done" ? "API payment recorded" : "API payment needs separate verification"}</span><span>Quote ≠ swap ≠ payout</span></div>
+  </section>;
 }
 
 export function Replay({ items }: { items: { id: string; at: string; kind: string; code: string; reason: string; next: string; observed: string }[] }) {
   const [index, setIndex] = useState(0);
   const item = items[index];
-  if (!item) return <section className="panel">No decisions yet. Run a funding analysis.</section>;
+  if (!item) return <section className="panel"><div className="section-heading"><h2>Agent activity</h2><Cpu size={17} className="muted" aria-hidden="true" /></div><div className="empty-state"><Cpu size={25} aria-hidden="true" /><strong>Ready when you are</strong><p>No decisions yet. Run a funding analysis to see the inputs, checks and next action here.</p></div></section>;
   return (
     <section className="panel stack">
       <div className="kicker">Decision replay</div>

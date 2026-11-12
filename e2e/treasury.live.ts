@@ -62,6 +62,7 @@ test("synthetic wallet owner approves, signs once and reconciles a complete live
   await swap.locator('input[type="file"]').setInputFiles({ name: "synthetic-build.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(bundle)) });
   const preview = swap.getByRole("button", { name: "Preview live swap", exact: true }); await expect(preview).toBeEnabled(); await preview.click();
   await expect(swap.getByTestId("treasury-review")).toBeVisible(); await expect(swap.getByRole("link", { name: "Verified Swap.io API build payment", exact: true })).toBeVisible();
+  await page.screenshot({ path: "audit/defi-ui/live-swap-preview.png", fullPage: true });
   await swap.getByRole("checkbox").check(); await swap.getByRole("button", { name: "Sign exact approval message", exact: true }).click();
   const signSwap = swap.getByRole("button", { name: "Sign and submit this transaction once", exact: true }); await expect(signSwap).toBeVisible(); await signSwap.click();
   await expect(swap.getByText(/Submitted once. Settlement is unresolved/)).toBeVisible(); const swapped = page.waitForEvent("load"); await swap.getByRole("button", { name: "Reconcile on Solana", exact: true }).click(); await swapped;

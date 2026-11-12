@@ -1,62 +1,26 @@
 import { ActionForm } from "@/components/action-form";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowDownUp, ArrowUpRight, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
 import { refreshAction } from "@/server/actions";
 import { solscanAccount } from "@/solana/address";
 import { getWorkspace } from "@/server/read";
+import { TokenIcon } from "@/components/brand";
 
 export const dynamic = "force-dynamic";
-
 export default async function TreasuryPage() {
   const data = await getWorkspace();
   if (!data) redirect("/login");
   if (data.session.role === "contributor") redirect("/milestones");
   const { books, usdc, sol } = data;
   const cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER || "mainnet-beta";
-  const cards = [
-    ["Treasury SOL", sol(books.treasury.solAtomic), books.treasury.address],
-    ["Treasury USDC", usdc(books.treasury.usdcAtomic), "Available " + usdc(books.ledger.availableUsdcAtomic)],
-    ["API payer USDC", usdc(books.payer.usdcAtomic), "Spendable " + usdc(books.ledger.x402SpendableAtomic)],
-    ["SOL reserve", sol(books.policy.minTreasurySolAtomic), "Safe to quote " + sol(books.ledger.safeSolAtomic)],
-  ];
-  return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div>
-          <p className="kicker">Treasury</p>
-          <h1 style={{ margin: 0 }}>Two wallets, two jobs</h1>
-        </div>
-        <ActionForm action={refreshAction}><button className="btn" type="submit">Refresh</button></ActionForm>
-      </div>
-      <p>The treasury wallet holds SOL and USDC. The API wallet holds USDC for x402 only. Nothing moves between them without an authorized transfer. USD valuation is unavailable.</p>
-      <div className="grid-metrics" style={{ gridTemplateColumns: "repeat(4, minmax(0,1fr))" }}>
-        {cards.map(([label, value, hint]) => (
-          <article key={label} className="metric"><div className="kicker">{label}</div><div className="num" style={{ fontSize: 28 }}>{value}</div><p>{hint}</p></article>
-        ))}
-      </div>
-      <section className="panel table-wrap">
-        <table>
-          <thead><tr><th>Wallet</th><th>Address</th><th>Source</th><th>Observed</th></tr></thead>
-          <tbody>
-            {[books.treasury, books.payer].map((account) => {
-              const href = account.source === "demo" ? null : solscanAccount(account.address, cluster);
-              return (
-                <tr key={account.id}>
-                  <td>{account.kind}</td>
-                  <td>{href ? <a href={href}>{account.address}</a> : account.address}</td>
-                  <td><span className="badge">{account.source === "demo" ? "DEMO LEDGER" : account.source}</span></td>
-                  <td>{account.observedAt.toISOString()}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-      <section className="panel">
-        <h2>Commitments</h2>
-        <p>Approved unpaid {usdc(books.obligations.reduce((sum, row) => sum + BigInt(row.amountAtomic), 0n))}.</p>
-        <p>Locked batches {usdc(books.commitments.reduce((sum, row) => sum + BigInt(row.amountAtomic), 0n))}.</p>
-        <p>Network fee estimate is unavailable until a transaction is built. The x402 micropayment is not that fee.</p>
-      </section>
-    </div>
-  );
+  return <div className="stack">
+    <div className="page-heading"><div><p className="kicker">Assets & reserves</p><h1>Your treasury</h1><p>Two wallets. Clear boundaries. Every movement approved.</p></div><div className="row"><ActionForm action={refreshAction}><button className="btn" type="submit"><RefreshCw size={14} aria-hidden="true" />Refresh</button></ActionForm><Link className="btn primary" href="/swap"><ArrowDownUp size={14} aria-hidden="true" />Swap assets</Link></div></div>
+    <div className="two wallet-grid">{[books.treasury, books.payer].map((account) => {
+      const treasury = account.kind === "treasury", href = account.source === "demo" ? null : solscanAccount(account.address, cluster);
+      return <section className="panel wallet-account" key={account.id}><div className="wallet-account-heading"><div className="row"><Wallet size={17} className="accent-text" aria-hidden="true" /><h2 style={{ margin: 0, fontSize: 15 }}>{treasury ? "Treasury wallet" : "x402 API wallet"}</h2></div><span className={account.source === "demo" ? "badge amber" : "badge cyan"}>{account.source === "demo" ? "DEMO LEDGER" : account.source}</span></div><p style={{ fontSize: 11 }}>{treasury ? "Holds SOL and USDC for owner-approved swaps and payroll." : "Dedicated USDC balance for separately approved Swap.io API payments."}</p><div className="wallet-balances"><div className="wallet-balance-item"><TokenIcon symbol="SOL" /><div><small>Solana</small><div className="num">{sol(account.solAtomic)}</div></div></div><div className="wallet-balance-item"><TokenIcon symbol="USDC" /><div><small>USD Coin</small><div className="num">{usdc(account.usdcAtomic)}</div></div></div></div><div className="treasury-address">{href ? <a href={href} target="_blank" rel="noreferrer">{account.address} <ArrowUpRight size={11} style={{ display: "inline" }} aria-hidden="true" /></a> : account.address}</div><div className="wallet-account-footer"><span>{treasury ? "Available " + usdc(books.ledger.availableUsdcAtomic) : "Spendable " + usdc(books.ledger.x402SpendableAtomic)}</span><span>Observed {account.observedAt.toISOString().slice(0, 16).replace("T", " ")} UTC</span></div></section>;
+    })}</div>
+    <div className="grid-metrics"><article className="metric"><div className="kicker">Protected SOL reserve</div><div className="num">{sol(books.policy.minTreasurySolAtomic)}</div><p>Preserved before any treasury movement</p></article><article className="metric"><div className="kicker">Protected USDC reserve</div><div className="num">{usdc(books.policy.minTreasuryUsdcAtomic)}</div><p>Excluded from available payroll funding</p></article><article className="metric"><div className="kicker">Approved unpaid</div><div className="num">{usdc(books.obligations.reduce((sum, row) => sum + BigInt(row.amountAtomic), 0n))}</div><p>Approved obligations outside locked batches</p></article><article className="metric"><div className="kicker">Locked batches</div><div className="num">{usdc(books.commitments.reduce((sum, row) => sum + BigInt(row.amountAtomic), 0n))}</div><p>Already reserved against approved payroll</p></article></div>
+    <section className="panel"><div className="section-heading"><h2>Reserves come first</h2><ShieldCheck size={18} className="accent-text" aria-hidden="true" /></div><p>Nothing moves between these wallets without an authorized transfer. Exact network fees and rent are checked when a transaction is built. The x402 API charge is a separate payment. USD valuation of SOL is unavailable.</p></section>
+  </div>;
 }

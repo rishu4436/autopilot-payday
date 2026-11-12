@@ -1,5 +1,7 @@
 # Autopilot Payday
 
+The interface includes a responsive treasury dashboard, wallet overview, focused Swap.io transaction review, payroll selection and independently verified receipt downloads. Demo, read-only and live states remain visibly distinct.
+
 For a real owner-operated competition recording on Vercel, follow [VERCEL-LIVE-DEMO.md](VERCEL-LIVE-DEMO.md). Enter your public wallets and private host configuration locally; `pnpm live:check` checks setup without signing or spending.
 
 Treasury funding and contributor payroll for a small team. An agent watches approved USDC obligations, protects reserves, and buys a Swap.io quote through x402 only when treasury USDC is short. People still authorize every swap and every payout.

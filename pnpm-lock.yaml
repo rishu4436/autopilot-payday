@@ -11,6 +11,7 @@ overrides:
   zod: ^4.6.7
   jayson: ^5.0.0
   uuid@<11.1.1: ^11.1.1
+  rpc-websockets>uuid: 9.0.1
   minimatch@>=7.0.0 <11.0.1: ^11.0.1
 
 importers:
@@ -3840,8 +3841,9 @@ packages:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
     hasBin: true
 
-  uuid@14.0.3:
-    resolution: {integrity: sha512-Sc5u1VVln93y1Xnz4R+CunOZc7R9LUcTmhj7Rc7Eg3HVcf7rVn2FOoa812fe0W8p3jD7xeoGSYbfqCGGH2B6xw==}
+  uuid@9.0.1:
+    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   victory-vendor@36.9.2:
@@ -7526,7 +7528,7 @@ snapshots:
       '@types/ws': 8.18.2
       buffer: 6.0.3
       eventemitter3: 5.0.4
-      uuid: 14.0.3
+      uuid: 9.0.1
       ws: 8.22.2(bufferutil@4.2.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       bufferutil: 4.2.0
@@ -7836,7 +7838,7 @@ snapshots:
 
   uuid@11.1.1: {}
 
-  uuid@14.0.3: {}
+  uuid@9.0.1: {}
 
   victory-vendor@36.9.2:
     dependencies:

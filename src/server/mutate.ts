@@ -971,6 +971,7 @@ async function setModeImpl(session: Session, mode: string, liveEnabled: boolean)
   if (session.role !== "owner") return fail("Only the owner can change the operating mode.");
   if (mode !== "demo" && mode !== "live_readonly" && mode !== "live") return fail("Unknown mode");
   const current = await loadBooks(await getDb(), session.orgId);
+  if (current.org.mode === "uat_readonly") return fail("This throwaway test workspace cannot change mode or enable financial execution. Provision a separate workspace with backed-up wallets for live use.", "UAT_READONLY");
   if (current.treasury.source === "demo" || session.authMode === "demo") {
     if (mode !== "demo" || liveEnabled) return fail("Demo fixtures cannot become live state. Use an independently provisioned deployment.", "DEMO_ISOLATION");
   }
@@ -994,9 +995,11 @@ async function refreshBalancesImpl(session: Session): Promise<ActionState> {
   }
   try {
     const treasury = await readChainBalances(books.treasury.address);
-    const payer = await readChainBalances(books.payer.address);
+    const payerUnconfigured = books.payer.address === "" && books.payer.source === "unconfigured";
+    const payer = payerUnconfigured ? null : await readChainBalances(books.payer.address);
     await db.update(treasuryAccounts).set({ solAtomic: treasury.solAtomic.toString(), usdcAtomic: treasury.usdcAtomic.toString(), source: "rpc", observedAt: new Date(), observedSlot: treasury.slot }).where(and(eq(treasuryAccounts.id, books.treasury.id), sql`(${treasuryAccounts.observedSlot} is null or ${treasuryAccounts.observedSlot}<=${treasury.slot})`));
-    await db.update(treasuryAccounts).set({ solAtomic: payer.solAtomic.toString(), usdcAtomic: payer.usdcAtomic.toString(), source: "rpc", observedAt: new Date(), observedSlot: payer.slot }).where(and(eq(treasuryAccounts.id, books.payer.id), sql`(${treasuryAccounts.observedSlot} is null or ${treasuryAccounts.observedSlot}<=${payer.slot})`));
+    if (payer) await db.update(treasuryAccounts).set({ solAtomic: payer.solAtomic.toString(), usdcAtomic: payer.usdcAtomic.toString(), source: "rpc", observedAt: new Date(), observedSlot: payer.slot }).where(and(eq(treasuryAccounts.id, books.payer.id), sql`(${treasuryAccounts.observedSlot} is null or ${treasuryAccounts.observedSlot}<=${payer.slot})`));
+    if (!payer) return ok(`Treasury balances read from RPC at slot ${treasury.slot}. API payer is not configured; its balance was not read. USD value is unavailable.`);
     return ok(`Balances read from RPC at slot ${treasury.slot}. USD value is unavailable.`);
   } catch {
     return fail("RPC did not return balances. Existing figures were left unchanged.", "RPC_OUTAGE");

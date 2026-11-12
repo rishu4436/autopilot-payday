@@ -11,7 +11,7 @@ import { seedIfEmpty } from "../db/seed";
 import type { AppDb } from "../db/client";
 import type { Session } from "./session";
 import { LiveTreasuryService, TREASURY_RELEASE, type TreasuryPreview } from "./live-treasury";
-import { treasuryApprovalMessage } from "./treasury-execution";
+import { TreasuryExecutionStore, treasuryApprovalMessage } from "./treasury-execution";
 import { TEST_TREASURY, TreasuryTestBank } from "../solana/__fixtures__/treasury-bank";
 import { defaultPolicy } from "../domain/policy-doc";
 import { USDC_MINT } from "../domain/tokens";
@@ -65,6 +65,21 @@ describe("controlled live treasury with synthetic RPC, actual signatures and rea
     const preview = await service.previewPayout(session, "live-batch");
     expect(preview.manifest.newAtas.length).toBeGreaterThan(0); expect(preview.submissionEnabled).toBe(false);
     await expect(service.approve(session, preview.id, signedApproval(preview))).rejects.toThrow("disabled"); expect(bank.sends).toBe(0);
+  });
+  it("refuses UAT owner approval even when deployment flags and live_enabled are armed", async () => {
+    await db.execute(sql`update organizations set mode='uat_readonly',live_enabled=true where id=${session.orgId}`);
+    const preview = await service.previewPayout(session, "live-batch");
+    await expect(service.approve(session, preview.id, signedApproval(preview))).rejects.toThrow("disabled");
+    expect((await db.execute(sql`select id from treasury_attempts`)).rows).toHaveLength(0);
+    expect(bank.sends).toBe(0);
+  });
+  it("refuses UAT resume and signed submission of a previously prepared attempt", async () => {
+    const attempt = await approved();
+    await db.execute(sql`update organizations set mode='uat_readonly',live_enabled=true where id=${session.orgId}`);
+    await expect(service.resume(session, attempt.attemptId)).rejects.toThrow("disabled");
+    await expect(service.submitSigned(session, attempt.attemptId, signedTx(attempt.preview))).rejects.toThrow("disabled");
+    expect((await new TreasuryExecutionStore(db).get(attempt.attemptId)).state).toBe("PREPARED");
+    expect(bank.sends).toBe(0);
   });
   it("rejects demo, role spoofing, wrong wallet and cross-organization ownership", async () => {
     for (const bad of [{ ...session, authMode: "demo" }, { ...session, role: "auditor" as const }, { ...session, orgId: "other" }, { ...session, userId: "user_auditor" }]) await expect(service.previewPayout(bad, "live-batch")).rejects.toThrow();

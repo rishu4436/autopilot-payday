@@ -51,7 +51,7 @@ export function Shell({ flash, role, name, authMode, orgMode, orgName, paused, p
     {open && <button className="nav-backdrop" type="button" aria-label="Close navigation" onClick={() => { setOpen(false); menuButton.current?.focus(); }} />}
     <aside id="workspace-navigation" inert={narrow && !open} className={open ? "side open" : "side"} aria-label="Workspace navigation">
       <Link className="brand" href="/" aria-label="Autopilot Payday home"><BrandMark /><span className="brand-wordmark">payday<span className="brand-dot">.</span><small>by Autopilot</small></span></Link>
-      <div className="workspace-card"><span className="workspace-avatar">{orgName.slice(0, 1)}</span><div className="workspace-copy"><strong>{orgName}</strong><small>{orgMode === "demo" ? "Demo workspace" : "Treasury workspace"}</small></div></div>
+      <div className="workspace-card"><span className="workspace-avatar">{orgName.slice(0, 1)}</span><div className="workspace-copy"><strong>{orgName}</strong><small>{orgMode === "demo" ? "Demo workspace" : orgMode === "uat_readonly" ? "Test-only workspace" : "Treasury workspace"}</small></div></div>
       <nav aria-label="Main navigation">
         {["Workspace", "Team & activity", "Manage"].map((group) => {
           const entries = links.filter((entry) => entry.group === group);
@@ -69,7 +69,7 @@ export function Shell({ flash, role, name, authMode, orgMode, orgName, paused, p
       <header className="top">
         <div className="top-location"><button ref={menuButton} className="icon-button mobile-menu" type="button" aria-label={open ? "Close menu" : "Menu"} aria-expanded={open} aria-controls="workspace-navigation" onClick={() => setOpen((value) => !value)}>{open ? <X size={20} /> : <Menu size={20} />}</button><span className="breadcrumb-root">Workspace</span><ChevronRight size={14} className="muted" aria-hidden="true" /><strong>{current}</strong></div>
         <div className="top-actions">
-          <span className={orgMode === "demo" ? "badge amber" : orgMode === "live" ? "badge mint" : "badge cyan"} data-testid="mode-badge">{orgMode === "demo" ? "DEMO" : orgMode === "live" ? "LIVE" : "LIVE READ-ONLY"}</span>
+          <span className={orgMode === "demo" ? "badge amber" : orgMode === "live" ? "badge mint" : "badge cyan"} data-testid="mode-badge">{orgMode === "demo" ? "DEMO" : orgMode === "live" ? "LIVE" : orgMode === "uat_readonly" ? "TEST READ-ONLY" : "LIVE READ-ONLY"}</span>
           {paused && <span className="badge coral">Paused</span>}
           <button className="icon-button theme-control" type="button" aria-label={theme === "dark" ? "Light theme" : "Dark theme"} title={theme === "dark" ? "Light theme" : "Dark theme"} onClick={() => { const next = theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; try { localStorage.setItem("ap-theme", next); } catch { /* Theme still applies without storage. */ } setTheme(next); }}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
           <form action={readAction}><button className="icon-button notification-control" type="submit" aria-label={`Alerts ${unread}`} title={`Alerts ${unread}`}><Bell size={18} aria-hidden="true" />{unread > 0 && <span className="notification-dot" />}</button></form>
@@ -80,6 +80,7 @@ export function Shell({ flash, role, name, authMode, orgMode, orgName, paused, p
       <main className="workspace-content" id="workspace-content">
         {flash && <div className="flash" role="status">{flash}</div>}
         {walletError && <div className="flash" role="alert">{walletError} <Link href="/login">Wallet sign-in</Link></div>}
+        {orgMode === "uat_readonly" && <div className="flash" role="note" data-testid="uat-notice"><strong>Test-only workspace.</strong> Do not fund this throwaway wallet. Financial execution cannot be enabled for this workspace. Balances are read from Solana mainnet.</div>}
         {children}
         <footer className="workspace-footer"><span><span className="status-dot" />{orgMode === "demo" ? "Simulated ledger" : "Solana mainnet"}</span><span>{authMode === "demo" ? "Demo sign-in" : "Wallet sign-in"} · {role}<span className="footer-separator">/</span>Autopilot Payday</span></footer>
       </main>

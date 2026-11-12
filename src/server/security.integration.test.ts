@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,8 @@ import * as schema from "@/db/schema";
 import { getSession } from "./session";
 import type { Session } from "./session";
 import { requestDomain } from "./request-security";
-import { analyze, approveSwap, buyQuote, decideBatch, finishChallenge, loginDemo, makeBatch, markPartial, registerWallet, reviewMilestone, saveContributor, saveMilestone, setAllowlist, setMode, setPaused, settleDemoPayout, settleDemoSwap, shareProof, startChallenge, submitSignedSwap, prepareLivePayout } from "./mutate";
+import * as chain from "./chain";
+import { analyze, approveSwap, buyQuote, decideBatch, finishChallenge, loginDemo, makeBatch, markPartial, refreshBalances, registerWallet, reviewMilestone, saveContributor, saveMilestone, setAllowlist, setMode, setPaused, settleDemoPayout, settleDemoSwap, shareProof, startChallenge, submitSignedSwap, prepareLivePayout } from "./mutate";
 
 const state = vi.hoisted(() => ({ cookies: new Map<string, string>(), headers: new Map<string, string>() }));
 vi.mock("next/headers", () => ({
@@ -47,6 +48,7 @@ beforeEach(async () => {
   state.headers.set("host", "127.0.0.1:3100"); state.headers.set("origin", "http://127.0.0.1:3100");
   process.env.APP_MODE = "demo"; process.env.APP_ORIGIN = "http://127.0.0.1:3100";
 }, 60_000);
+afterEach(() => vi.restoreAllMocks());
 
 describe("real database authorization and payroll regressions", () => {
   it("requires HTTPS for hosted financial origins while accepting the configured secure host", async () => {
@@ -143,6 +145,45 @@ describe("real database authorization and payroll regressions", () => {
     expect((await submitSignedSwap(owner, "malicious"))?.code).toBe("LIVE_QUARANTINED");
     await (await getDb()).insert(schema.members).values({ id: "foreign-membership", orgId: "other", userId: "user_maya", role: "owner", createdAt: new Date() });
     expect((await registerWallet({ ...owner, authMode: "wallet" }, "user_maya", (await books()).treasury.address))?.ok).toBe(false);
+  });
+  it("prevents every supported mode change for a throwaway UAT workspace", async () => {
+    const db = await getDb();
+    await db.update(schema.organizations).set({ mode: "uat_readonly", liveEnabled: false }).where(eq(schema.organizations.id, owner.orgId));
+    await db.update(schema.treasuryAccounts).set({ source: "rpc" }).where(eq(schema.treasuryAccounts.orgId, owner.orgId));
+    const walletOwner = { ...owner, authMode: "wallet" };
+    for (const mode of ["demo", "live_readonly", "live"]) {
+      for (const enable of [false, true]) expect((await setMode(walletOwner, mode, enable))?.code).toBe("UAT_READONLY");
+    }
+    expect((await books()).org).toMatchObject({ mode: "uat_readonly", liveEnabled: false });
+    expect((await db.select().from(schema.audits).where(eq(schema.audits.action, "mode.update"))).length).toBe(0);
+  });
+  it("refreshes the treasury without fabricating a balance observation for an unconfigured payer", async () => {
+    const db = await getDb();
+    await db.update(schema.organizations).set({ mode: "uat_readonly", liveEnabled: false }).where(eq(schema.organizations.id, owner.orgId));
+    await db.update(schema.treasuryAccounts).set({ address: "", source: "unconfigured", solAtomic: "0", usdcAtomic: "0", observedSlot: null }).where(eq(schema.treasuryAccounts.id, "acct_payer"));
+    const before = await books();
+    const read = vi.spyOn(chain, "readChainBalances").mockResolvedValue({ solAtomic: 123n, usdcAtomic: 456n, slot: 100 });
+    const result = await refreshBalances({ ...owner, authMode: "wallet" });
+    expect(result?.ok).toBe(true);
+    expect(result?.message).toContain("API payer is not configured; its balance was not read");
+    expect(read).toHaveBeenCalledExactlyOnceWith(before.treasury.address);
+    const after = await books();
+    expect(after.treasury).toMatchObject({ solAtomic: "123", usdcAtomic: "456", source: "rpc", observedSlot: 100 });
+    expect(after.payer).toEqual(before.payer);
+  });
+  it.each([
+    { address: "", source: "rpc" },
+    { address: "not-a-wallet", source: "unconfigured" },
+  ])("does not silently skip a malformed configured payer $address/$source", async ({ address, source }) => {
+    const db = await getDb();
+    await db.update(schema.organizations).set({ mode: "uat_readonly", liveEnabled: false }).where(eq(schema.organizations.id, owner.orgId));
+    await db.update(schema.treasuryAccounts).set({ address, source }).where(eq(schema.treasuryAccounts.id, "acct_payer"));
+    const before = await books();
+    const read = vi.spyOn(chain, "readChainBalances").mockResolvedValueOnce({ solAtomic: 123n, usdcAtomic: 456n, slot: 100 }).mockRejectedValueOnce(new Error("Invalid payer"));
+    expect((await refreshBalances({ ...owner, authMode: "wallet" }))?.code).toBe("RPC_OUTAGE");
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenNthCalledWith(2, address);
+    expect((await books()).treasury).toEqual(before.treasury);
   });
   it("rejects expired quotes", async () => {
     await analyze(owner, "1"); await buyQuote(owner);

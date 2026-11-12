@@ -28,7 +28,7 @@ export default async function X402Page() {
       <p>A subscription would charge the treasury every month. x402 charges a fraction of a cent when the agent actually needs a route. Failed calls are not charged. A 200 without a settlement receipt is not treated as paid.</p>
       <div className="row">
         <span className={discovery ? "badge mint" : "badge coral"}>{discovery ? "Hermes reachable" : "Discovery unavailable"}</span>
-        <span className="badge">Payer {data.books.payer.address.slice(0, 4)}…{data.books.payer.address.slice(-4)}</span>
+        <span className="badge">{data.books.payer.address && data.books.payer.source !== "unconfigured" ? `Payer ${data.books.payer.address.slice(0, 4)}…${data.books.payer.address.slice(-4)}` : "Payer not configured"}</span>
         <span className="badge">Network solana</span>
       </div>
       {discoveryError && <p>{discoveryError}</p>}

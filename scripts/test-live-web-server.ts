@@ -39,6 +39,17 @@ async function main() {
     bank.registerWallet(task.locked_recipient, 0n, false);
     await db.execute(sql`insert into payroll_items(id,batch_id,milestone_id,amount_atomic,recipient,status) values (${`live-browser-${i}`},'live-browser-batch',${task.id},${task.amount_atomic},${task.locked_recipient},'PENDING')`);
   }
+  // Separate unfunded test identity; never use a real user's public address or key.
+  // Global execution flags below remain armed so the UAT workspace gate is tested.
+  const uatOwner = Keypair.fromSeed(new Uint8Array(32).fill(232)).publicKey.toBase58();
+  bank.registerWallet(uatOwner, 0n, false);
+  bank.accounts.set(uatOwner, { lamports: 0n });
+  await db.execute(sql`insert into organizations(id,name,slug,project_name,mode,live_enabled,created_at) values ('org_owner_uat','Owner UAT test','owner-uat-test','Owner testing','uat_readonly',false,now())`);
+  await db.execute(sql`insert into users(id,display_name,wallet_address,created_at) values ('user_owner_uat','UAT owner',${uatOwner},now())`);
+  await db.execute(sql`insert into organization_members(id,org_id,user_id,role,created_at) values ('member_owner_uat','org_owner_uat','user_owner_uat','owner',now())`);
+  await db.execute(sql`insert into policies(id,org_id,version,body,created_at) values ('policy_owner_uat','org_owner_uat',1,${JSON.stringify(defaultPolicy())},now())`);
+  await db.execute(sql`insert into projects(id,org_id,name,summary) values ('project_owner_uat','org_owner_uat','Owner testing','Nonfinancial owner workflow checks')`);
+  await db.execute(sql`insert into treasury_accounts(id,org_id,kind,address,sol_atomic,usdc_atomic,source,observed_at,observed_slot) values ('treasury_owner_uat','org_owner_uat','treasury',${uatOwner},'0','0','synthetic-rpc',now(),100),('payer_owner_uat','org_owner_uat','api_payer','','0','0','unconfigured',now(),null)`);
   await client.close(); // Next owns the only persistent PGlite handle from here.
   const artifact = syntheticCpmmBuild(bank);
   bank.registerWallet(apiPayer.publicKey.toBase58(), 100_000_000n, true);

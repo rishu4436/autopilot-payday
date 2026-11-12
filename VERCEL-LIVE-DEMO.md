@@ -44,6 +44,16 @@ vercel deploy --prod
 
 Provisioning reads public mainnet balances, creates a new real workspace and signs nothing. Re-running with the same exact wallet mappings leaves configuration unchanged. It refuses to promote seeded demo organizations. Open the final production domain, connect your treasury wallet and sign in. Unknown wallets are refused. Settings → **Live demo setup** shows configuration gaps; Treasury → refresh balances reads actual funds.
 
+### Unfunded owner testing before wallet setup
+
+For message-signature sign-in and nonfinancial workflow testing with a throwaway wallet, set only `TREASURY_PUBLIC_KEY`, a new `ORG_SLUG` and optionally `ORG_NAME`, then run:
+
+```powershell
+pnpm live:provision-org --provision-public-addresses --test-owner-only
+```
+
+This creates a `uat_readonly` workspace with an explicitly unconfigured API payer. Treasury balances come from mainnet RPC; no balances are fabricated. The workspace cannot be promoted by the mode action or live provisioning command, and cannot approve, sign or submit financial transactions. Keep it unfunded. A wallet without a backed-up recovery phrase is unsuitable for funds. Use a separate securely backed-up treasury and a new live workspace for funded testing; the provisioning command never reassigns an existing owner identity.
+
 The repository includes `vercel.json` build settings, Node runtime configuration, a 60-second app function duration and `.vercelignore` exclusions for local databases, environment files, signer journals, keys and private evidence. Inspect the deployment source list if you keep other private files in the working directory. `vendor/bigint-buffer` must remain in the upload because the lockfile references it.
 
 ## 2. Enable owner-approved mainnet execution

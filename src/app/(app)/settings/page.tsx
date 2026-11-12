@@ -15,6 +15,7 @@ export default async function SettingsPage() {
   if (data.session.role === "contributor") redirect("/milestones");
   const policy = data.books.policy;
   const owner = data.session.role === "owner";
+  const testOnly = data.books.org.mode === "uat_readonly";
   const readiness = liveReadiness(data.books, data.session, process.env);
   return (
     <div className="stack">
@@ -24,7 +25,12 @@ export default async function SettingsPage() {
         <p>Live swaps and payouts require an enabled non-demo workspace, deployment opt-in and your exact wallet approval. Swap.io quote/build payments use the separate local approved-plan procedure. Signer {signerReady() ? "configured" : "not connected to this app"}. RPC host is server-side.</p>
         <p>Current RPC configured: {rpcUrl().startsWith("http") ? "set" : "missing"}. Cluster {process.env.SOLANA_CLUSTER || "mainnet-beta"}.</p>
       </section>
-      {owner && data.books.org.mode !== "demo" && <section className="panel stack" data-testid="live-readiness">
+      {testOnly && <section className="panel stack" data-testid="uat-settings">
+        <div className="row"><h2>Owner testing workspace</h2><span className="badge cyan">TEST READ-ONLY</span></div>
+        <p>Owner sign-in and nonfinancial workflow checks are available. This throwaway workspace stays read-only and cannot be activated for financial execution. Do not fund its wallet.</p>
+        <p>A separate, securely backed-up treasury and a new workspace are required for a funded demo. API payer {data.books.payer.address && data.books.payer.source !== "unconfigured" ? "configured" : "not configured"}.</p>
+      </section>}
+      {owner && data.books.org.mode !== "demo" && !testOnly && <section className="panel stack" data-testid="live-readiness">
         <div className="row"><h2>Live demo setup</h2><span className="badge">{readiness.every((check) => check.ok) ? "Configuration ready" : "Setup incomplete"}</span></div>
         <p>These checks describe configuration. Each transaction still requires fresh RPC validation, simulation, sufficient funds and your wallet signatures.</p>
         <ul>{readiness.map((check) => <li key={check.id}><strong>{check.ok ? "Ready" : "Action needed"}: {check.label}</strong><p>{check.detail}</p></li>)}</ul>
@@ -43,7 +49,7 @@ export default async function SettingsPage() {
           <button className="btn" type="submit">Save mode</button>
         </ActionForm>
       )}
-      {owner && data.books.org.mode !== "demo" && <section className="panel"><p>Live activation is managed by the local provisioning command and deployment settings. This page cannot arm financial execution. Use the pause control to stop new approvals; reconciliation remains available for submitted transactions.</p></section>}
+      {owner && data.books.org.mode !== "demo" && !testOnly && <section className="panel"><p>Live activation is managed by the local provisioning command and deployment settings. This page cannot arm financial execution. Use the pause control to stop new approvals; reconciliation remains available for submitted transactions.</p></section>}
       {owner ? (
         <ActionForm className="panel stack" action={policyAction}>
           <div className="two">
@@ -72,7 +78,7 @@ export default async function SettingsPage() {
           <button className="btn primary" type="submit">Save policy version</button>
         </ActionForm>
       ) : <section className="panel">Policy edits are limited to the owner. You can read version {policy.version}.</section>}
-      {owner && data.session.authMode === "wallet" && (
+      {owner && data.session.authMode === "wallet" && !testOnly && (
         <ActionForm className="panel stack" action={walletRegisterAction}>
           <label className="field">Member
             <select name="userId">
@@ -86,6 +92,7 @@ export default async function SettingsPage() {
           <button className="btn" type="submit">Register sign-in wallet</button>
         </ActionForm>
       )}
+      {owner && testOnly && <section className="panel"><p>This workspace is provisioned for owner testing. Additional member registration is unavailable here.</p></section>}
       <section className="panel">
         <h2>Recent audit</h2>
         {data.audits.slice(0, 8).map((row) => <p key={row.id}>{row.createdAt.toISOString()} · {row.action} · {row.entity}</p>)}

@@ -9,7 +9,9 @@ import type { createX402Client } from "x402-solana/client";
 import { HERMES_PAYEE, HERMES_FEE_PAYER, QUOTE_URL, type PaidPlan, validatePlan } from "@/hermes/paid-plan";
 import { USDC_MINT, WSOL_MINT } from "@/domain/tokens";
 import { createSignerServer } from "../../services/x402-signer/http-server";
-import { executePaidQuote, type PaidQuoteDependencies } from "../../services/x402-signer/execute";
+import { executePaidQuote, executePaidBuild, type PaidQuoteDependencies } from "../../services/x402-signer/execute";
+import { syntheticCpmmBuild } from "./__fixtures__/cpmm";
+import { TreasuryTestBank } from "./__fixtures__/treasury-bank";
 import { PaymentJournal } from "../../services/x402-signer/journal";
 
 const payer = Keypair.fromSeed(new Uint8Array(32).fill(21)).publicKey;
@@ -47,6 +49,32 @@ function harness(effect?: (config: Config, p: PaidPlan) => Promise<void>) {
   return { p, journal, deps };
 }
 describe("payment controller adversarial boundaries", () => {
+  it("purchases only unsigned build bytes with the API payer, never signs the treasury transaction", async () => {
+    const h = harness(), artifact = syntheticCpmmBuild(new TreasuryTestBank()), build = { ...artifact.record.plan, payer: h.p.payer };
+    h.deps.clientFactory = (c) => ({ fetch: async () => {
+      await c.beforePayment?.({ ...legacyTerms(h.p), resource: build.url } as unknown as HookTerms, { requestUrl: build.url, responseUrl: build.url, protocolVersion: 1 });
+      await c.wallet.signTransaction(tx());
+      return new Response(artifact.response.body, { headers: { "x-payment-response": artifact.response.receipt } });
+    } });
+    const result = await executePaidBuild(build, h.journal, h.deps);
+    expect(result.build.transaction).toBe(artifact.record.build.transaction); expect(h.deps.sign).toHaveBeenCalledTimes(1);
+    expect(h.journal.rows().at(-1)?.state).toBe("verified");
+    expect(h.journal.rows().at(-1)?.messageBase64).not.toBe(Buffer.from(VersionedTransaction.deserialize(Buffer.from(result.build.transaction, "base64")).message.serialize()).toString("base64"));
+  });
+  it("refuses signed provider builds after retaining their already-settled API payment", async () => {
+    const h = harness(), artifact = syntheticCpmmBuild(new TreasuryTestBank()), build = { ...artifact.record.plan, payer: h.p.payer };
+    const invalid = VersionedTransaction.deserialize(Buffer.from(artifact.record.build.transaction, "base64")); invalid.signatures[0]![0] = 1;
+    h.deps.clientFactory = (c) => ({ fetch: async () => {
+      await c.beforePayment?.({ ...legacyTerms(h.p), resource: build.url } as unknown as HookTerms, { requestUrl: build.url, responseUrl: build.url, protocolVersion: 1 }); await c.wallet.signTransaction(tx());
+      return new Response(JSON.stringify({ transaction: Buffer.from(invalid.serialize()).toString("base64"), provider: "raydium" }), { headers: { "x-payment-response": artifact.response.receipt } });
+    } });
+    await expect(executePaidBuild(build, h.journal, h.deps)).rejects.toThrow("unsigned"); expect(h.journal.rows().at(-1)?.state).toBe("verified"); expect(h.deps.sign).toHaveBeenCalledTimes(1);
+  });
+  it("refuses a stale quote before paying for its build", async () => {
+    const h = harness(), artifact = syntheticCpmmBuild(new TreasuryTestBank());
+    const build = { ...artifact.record.plan, quote: { ...artifact.record.plan.quote, createdAt: new Date(Date.now() - 180000).toISOString() } };
+    await expect(executePaidBuild(build, h.journal, h.deps)).rejects.toThrow("stale"); expect(h.deps.sign).not.toHaveBeenCalled(); expect(h.journal.rows()).toHaveLength(0);
+  });
   it("persists the approved message before signing and the receipt before verifying", async () => {
     const h = harness();
     h.deps.captureResponse = vi.fn(async () => {});

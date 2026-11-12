@@ -21,7 +21,7 @@ pnpm dev
 
 `pnpm dev` binds to loopback port 3100. Open http://127.0.0.1:3100/login and choose **Owner**. The Northstar Studio demo ledger shows a 90 USDC payroll gap: 125 approved, 35 available. Use this exact origin; another application may own port 3000.
 
-**Audit status:** live web payments, provider swaps and payroll broadcasting are quarantined. Demo fixtures cannot become live state. The separately approved local quote procedure is in [AUDIT-LIVE-RUNBOOK.md](AUDIT-LIVE-RUNBOOK.md); results, severity table and remaining limitations are in [AUDIT-REPORT.md](AUDIT-REPORT.md). No real paid response, swap or payout has been demonstrated.
+**Live implementation:** a managed treasury-wallet swap/payroll flow is implemented and disabled by default pending independent security review and explicit live opt-in. Swap.io remains the quote/build provider; the first route scope is direct Raydium CPMM SOL to USDC. Demo fixtures cannot become live state. See [LIVE-TREASURY.md](LIVE-TREASURY.md) for capabilities, setup and exact approval gates. Historical audits remain in [POST-AUDIT-REPORT.md](POST-AUDIT-REPORT.md). No funded/mainnet payment, swap or payout has been demonstrated.
 
 ## Scripts
 
@@ -34,17 +34,22 @@ pnpm dev
 | `pnpm start` | Serve the production build |
 | `pnpm db:seed` | Open the database. Seed runs only if Northstar is absent. |
 | `pnpm test:e2e` | Playwright against isolated production servers on ports 3100/3101. First run `pnpm exec playwright install chromium` and `pnpm build`. |
+| `pnpm test:e2e:live` | Isolated synthetic wallet/RPC browser execution on ports 3102/3140. No real network spending. |
 | `pnpm live:discover` | Free `GET /v1/info` |
 | `pnpm live:challenge` | Unpaid quote. Expect HTTP 402. Spends nothing. |
 | `pnpm live:prepare-quote` | Public-address balances, unpaid challenge and expiring approval plan. No signature or spend. |
 | `pnpm signer --enable-paid-quote` | Explicit owner-approved local signer. Requires the pinned plan/hash, private journal, token and keypair configuration described in the runbook. |
 | `pnpm live:paid-quote --i-understand-this-spends-usdc` | Execute the separately approved local plan once. Never run this during install or tests. |
+| `pnpm live:prepare-build` | Read-only preflight and approval plan for a separate Swap.io paid unsigned build. |
+| `pnpm live:paid-build --i-understand-this-spends-usdc` | Buy an unsigned build after its separate exact-plan approval. Does not swap. |
+| `pnpm live:export-swap-build` | Verify/export an existing private build bundle for owner upload. |
+| `pnpm live:provision-org --provision-public-addresses` | Provision a fresh non-demo workspace using public addresses and read-only balances. |
 
 ## Modes
 
 - **Demo.** Seeded Northstar ledger. Money movement is marked SIMULATED.
 - **Live read-only.** RPC balances, Hermes discovery, and unpaid 402 challenges. No broadcast.
-- **Live.** Web financial execution is quarantined. Setting environment flags cannot enable it. A narrow local paid quote experiment has separate approval gates; live swaps and payouts require additional engineering first.
+- **Live.** The managed owner-wallet flow additionally requires the reviewed-release flags, a separately enabled non-demo organization, current policy/allowlists and exact message/transaction signatures. Legacy generic broadcasters stay blocked. API payments remain local and separately approved.
 
 USD prices are not invented. USDC amounts are token amounts. SOL is shown in SOL.
 

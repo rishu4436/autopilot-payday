@@ -2,13 +2,13 @@ import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, 
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../../src/domain/approval";
-import { type PaidPlan, planHash, validatePlan } from "../../src/hermes/paid-plan";
+import { type PaymentPlan, planHash, validatePaymentPlan } from "../../src/hermes/paid-plan";
 
 export interface JournalRow {
   planId: string; hash: string; at: string; amount: string;
   state: "reserved" | "prepared" | "signed" | "verified" | "unknown";
   signature?: string; messageHash?: string; messageBase64?: string; receiptHeader?: string;
-  plan?: PaidPlan;
+  plan?: PaymentPlan;
 }
 type Envelope = { version: 2; previous: string; row: JournalRow; digest: string };
 const ZERO = "0".repeat(64);
@@ -52,9 +52,9 @@ export class PaymentJournal {
       this.write({ ...prior, ...row }, entries);
     });
   }
-  reserve(plan: PaidPlan, balance: bigint, now = Date.now()): JournalRow {
+  reserve(plan: PaymentPlan, balance: bigint, now = Date.now()): JournalRow {
     return this.locked(() => {
-      validatePlan(plan, now);
+      validatePaymentPlan(plan, now);
       const entries = this.entries(), rows = entries.map((e) => e.row);
       if (rows.some((row) => row.planId === plan.id)) throw new Error("Plan already attempted. Reconcile; never retry it.");
       const latest = new Map(rows.map((row) => [row.planId, row]));

@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { authorizeLocalRequest } from "./http-policy";
-import { type PaidPlan, planHash } from "../../src/hermes/paid-plan";
+import { type PaymentPlan, planHash } from "../../src/hermes/paid-plan";
 
-export function createSignerServer(input: { token: string; plan: PaidPlan; execute: () => Promise<unknown> }) {
+export function createSignerServer(input: { token: string; plan: PaymentPlan; execute: () => Promise<unknown> }) {
   let busy = false;
   async function body(req: IncomingMessage) {
     const chunks: Buffer[] = []; let size = 0;

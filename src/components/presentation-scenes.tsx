@@ -7,7 +7,7 @@ const SCENES = [
   ["The treasury is short", "Approved payroll is 125 USDC. Payroll-available USDC is 35. The gap is 90 USDC. SOL is still in the treasury. No exchange rate is assumed."],
   ["The quote asks to be paid", "Swap.io answers with HTTP 402 before it prices the route. The captured challenge on 2026-11-10 asked for 3007 atomic USDC, about a third of a cent. Nothing was spent to see that price."],
   ["A route comes back", "Paid integration is pending owner authorization. No paid response has been demonstrated. A demo route is labeled SIMULATED. A live route needs a settlement receipt before it can be trusted."],
-  ["The owner authorizes the swap", "This scene describes the intended workflow. Live swaps are disabled pending instruction validation. All demo funding is SIMULATED; 1 SOL to 90 USDC is a fixture, never a market quote."],
+  ["The owner authorizes the swap", "Live swaps require security review, explicit live opt-in and exact treasury-wallet approval. All demo funding is SIMULATED; 1 SOL to 90 USDC is a fixture, never a market quote."],
   ["Contributors get USDC", "The demo records SIMULATED payroll only. No live swap or payout has been executed. Chain evidence is required before claiming live settlement."],
 ];
 export default function PresentationScenes({ unpaid, paid, evidenceStatus }: { unpaid: { at: string; chargeAtomic: string; request: unknown } | null; paid: PublicPaidEvidence | null; evidenceStatus: string }) {

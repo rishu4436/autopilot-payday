@@ -1,18 +1,23 @@
-// Offline execution ledger. No route calls this module and it has no broadcaster.
+// Durable execution ledger. Submission is handled by the separately gated live service.
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { VersionedTransaction, TransactionInstruction } from "@solana/web3.js";
+import { VersionedTransaction } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 import type { AppDb } from "../db/client";
 import { inspectTreasuryTransaction, treasuryProposalHash, validateTreasurySimulation, type TreasuryManifest, type TreasuryContext } from "../solana/treasury-guard";
 import { canonicalJson } from "../domain/approval";
+import { decodeRpcInstruction } from "../solana/rpc-instructions";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
+import { USDC_MINT } from "../domain/tokens";
 import type { Connection } from "@solana/web3.js";
 
 export function treasuryApprovalMessage(m: TreasuryManifest): Uint8Array {
-  return Buffer.from(`Autopilot Payday treasury approval\nOrganization: ${m.proposal.orgId}\nProposal: ${m.proposalHash}\nMessage: ${m.messageHash}\nExpires: ${m.proposal.expiresAt}`);
+  const p = m.proposal;
+  return Buffer.from(`Autopilot Payday treasury approval\nNetwork: Solana mainnet\nOrganization: ${p.orgId}\nKind: ${p.kind}\nTreasury: ${p.owner}\nInput atomic (${p.kind === "swap" ? "lamports" : "USDC"}): ${p.maxInputAtomic}\nMinimum output USDC atomic: ${p.minOutputAtomic}\nMaximum SOL debit lamports: ${p.maxSolDebitLamports}\nMaximum fee lamports: ${p.maxFeeLamports}\nMaximum rent lamports: ${p.maxRentLamports}\nSOL reserve lamports: ${p.solReserveLamports}\nUSDC reserve atomic: ${p.usdcReserveAtomic ?? "0"}\nRecipients: ${p.allocations.map((a) => `${a.recipient}=${a.amountAtomic} USDC atomic (${a.milestoneId})`).join("; ") || p.owner}\nPolicy: ${p.policyVersion}\nProposal: ${m.proposalHash}\nMessage: ${m.messageHash}\nExpires: ${p.expiresAt}`);
 }
-type Attempt = { id: string; org_id: string; state: string; manifest: string; signature: string | null; signed_base64: string | null };
+export type TreasuryAttempt = { id: string; org_id: string; batch_id: string | null; draft_id: string | null; state: string; manifest: string; signature: string | null; signed_base64: string | null; evidence?: string | null };
 export class TreasuryExecutionStore {
   constructor(private readonly db: AppDb) {}
   async prepare(manifest: TreasuryManifest, sessionId: string, approvalSignature: string, validation: { before: TreasuryContext; simulation: Parameters<typeof validateTreasurySimulation>[2] }): Promise<string> {
@@ -33,7 +38,7 @@ export class TreasuryExecutionStore {
       const policy = await tx.execute<{ version: number }>(sql`select version from policies where org_id=${p.orgId} order by version desc limit 1`);
       if (policy.rows[0]?.version !== p.policyVersion) throw new Error("Policy version changed");
       for (const a of p.allocations) {
-        const allocation = await tx.execute(sql`select t.id from milestones t join contributors c on c.id=t.contributor_id and c.org_id=t.org_id where t.org_id=${p.orgId} and t.id=${a.milestoneId} and t.work_status='APPROVED' and t.payment_status='UNPAID' and t.locked_amount=${a.amountAtomic} and t.locked_recipient=${a.recipient} and c.active=true and c.allowlisted=true and c.address=${a.recipient} for update`);
+        const allocation = await tx.execute(sql`select t.id from milestones t join contributors c on c.id=t.contributor_id and c.org_id=t.org_id where t.org_id=${p.orgId} and t.id=${a.milestoneId} and t.work_status='APPROVED' and t.payment_status in ('UNPAID','READY_FOR_PAYMENT','FUNDING_REQUIRED','PAYMENT_FAILED') and t.mint='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' and c.mint=t.mint and t.amount_atomic=t.locked_amount and t.locked_amount=${a.amountAtomic} and t.locked_recipient=${a.recipient} and c.active=true and c.allowlisted=true and c.address=${a.recipient} for update`);
         if (allocation.rows.length !== 1) throw new Error("Milestone, amount or allowlist changed");
       }
       const id = crypto.randomUUID();
@@ -42,8 +47,8 @@ export class TreasuryExecutionStore {
       return id;
     });
   }
-  async get(id: string): Promise<Attempt> {
-    const row = (await this.db.execute<Attempt>(sql`select * from treasury_attempts where id=${id}`)).rows[0];
+  async get(id: string): Promise<TreasuryAttempt> {
+    const row = (await this.db.execute<TreasuryAttempt>(sql`select * from treasury_attempts where id=${id}`)).rows[0];
     if (!row) throw new Error("Unknown execution attempt"); return row;
   }
   async recordSigned(id: string, base64: string): Promise<string> {
@@ -72,9 +77,9 @@ export class TreasuryExecutionStore {
     if (Boolean(status.err) !== Boolean(chain.meta.err)) throw new Error("Inconsistent chain outcome");
     const next = chain.meta.err ? "FAILED" : "CONFIRMED";
     // Settlement is deliberately still gated: positive success needs the full asset-effects validator.
-    if (next === "CONFIRMED") await verifyTreasuryEffects(m, chain);
+    const balances = next === "CONFIRMED" ? await verifyTreasuryEffects(m, chain) : null;
     await this.db.transaction(async (tx) => {
-      const changed = await tx.execute(sql`update treasury_attempts set state=${next},evidence=${JSON.stringify({ slot: chain.slot, signature: row.signature, err: chain.meta!.err })},updated_at=now() where id=${id} and state in ('SIGNED','UNKNOWN') returning id`);
+      const changed = await tx.execute(sql`update treasury_attempts set state=${next},evidence=${JSON.stringify({ slot: chain.slot, signature: row.signature, err: chain.meta!.err, balances })},updated_at=now() where id=${id} and state in ('SIGNED','UNKNOWN') returning id`);
       if (!changed.rows.length) return;
       if (next === "FAILED") await tx.execute(sql`delete from treasury_allocation_claims where attempt_id=${id}`);
       // Confirmed claims remain forever. Existing demo tables are not advanced by this offline ledger.
@@ -86,9 +91,7 @@ export class TreasuryExecutionStore {
     return { confirmed: rows.filter((r) => r.state === "CONFIRMED").length, failed: rows.filter((r) => r.state === "FAILED").length, held: rows.filter((r) => !["CONFIRMED", "FAILED"].includes(r.state)).length };
   }
 }
-async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable<Awaited<ReturnType<Connection["getTransaction"]>>>): Promise<void> {
-  // Reconciliation covers simple USDC payroll only; swap success remains held for route-specific review.
-  if (m.proposal.kind !== "payout") throw new Error("Route settlement effects require independent review");
+async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable<Awaited<ReturnType<Connection["getTransaction"]>>>): Promise<{ solAtomic: string; usdcAtomic: string }> {
   const meta = tx.meta!, keys = tx.transaction.message.staticAccountKeys;
   const ownerIndex = keys.findIndex((key) => key.toBase58() === m.proposal.owner);
   if (ownerIndex < 0 || meta.fee > Number(m.proposal.maxFeeLamports) || BigInt(meta.preBalances[ownerIndex]! - meta.postBalances[ownerIndex]!) > BigInt(m.proposal.maxSolDebitLamports) || BigInt(meta.postBalances[ownerIndex]!) < BigInt(m.proposal.solReserveLamports)) throw new Error("Unexpected SOL effects");
@@ -100,14 +103,17 @@ async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable<Awaite
     before.accounts.set(address, { address, exists: meta.preBalances[i]! > 0, lamports: BigInt(meta.preBalances[i]!), mint: pre?.mint, authority: pre?.owner, amount: pre ? BigInt(pre.uiTokenAmount.amount) : undefined });
     after.set(address, { address, exists: meta.postBalances[i]! > 0, lamports: BigInt(meta.postBalances[i]!), mint: post?.mint, authority: post?.owner, amount: post ? BigInt(post.uiTokenAmount.amount) : undefined });
   });
-  const innerInstructions = (meta.innerInstructions ?? []).flatMap((group) => group.instructions.map((ix) => {
-    if (!keys[ix.programIdIndex] || ix.accounts.some((index) => !keys[index])) throw new Error("Unresolved settlement instruction");
-    return new TransactionInstruction({ programId: keys[ix.programIdIndex]!, keys: ix.accounts.map((index) => ({ pubkey: keys[index]!, isSigner: tx.transaction.message.isAccountSigner(index), isWritable: tx.transaction.message.isAccountWritable(index) })), data: Buffer.from(bs58.decode(ix.data)) });
-  }));
+  if (meta.innerInstructions == null && meta.logMessages?.some((line) => /^Program \S+ invoke \[[2-9]\d*\]/.test(line))) throw new Error("Missing inner settlement evidence");
+  const innerInstructions = (meta.innerInstructions ?? []).flatMap((group) => group.instructions.map((ix) => decodeRpcInstruction(ix, tx.transaction.message)));
   validateTreasurySimulation(m, before, { err: meta.err, logs: meta.logMessages ?? [], after, innerInstructions });
   for (const [address, amount] of [...Object.entries(m.tokenDebits).map(([a, v]) => [a, -BigInt(v)] as const), ...Object.entries(m.tokenCredits).map(([a, v]) => [a, BigInt(v)] as const)]) {
     const index = keys.findIndex((key) => key.toBase58() === address), pre = meta.preTokenBalances?.find((b) => b.accountIndex === index), post = meta.postTokenBalances?.find((b) => b.accountIndex === index);
     const owner = m.ataOwners[address] ?? m.proposal.owner;
-    if (!post || post.mint !== "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" || post.owner !== owner || post.uiTokenAmount.decimals !== 6 || (pre && (pre.mint !== post.mint || pre.owner !== owner || pre.uiTokenAmount.decimals !== 6)) || BigInt(post.uiTokenAmount.amount) - BigInt(pre?.uiTokenAmount.amount ?? "0") !== amount) throw new Error("Unexpected token settlement effects");
+    const delta = BigInt(post?.uiTokenAmount.amount ?? "0") - BigInt(pre?.uiTokenAmount.amount ?? "0");
+    if (!post || post.mint !== "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" || post.owner !== owner || post.uiTokenAmount.decimals !== 6 || (pre && (pre.mint !== post.mint || pre.owner !== owner || pre.uiTokenAmount.decimals !== 6)) || (m.proposal.kind === "swap" && amount > 0n ? delta < amount : delta !== amount)) throw new Error("Unexpected token settlement effects");
   }
+  const ownerAta = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), new PublicKey(m.proposal.owner));
+  const index = keys.findIndex((key) => key.equals(ownerAta)), balance = meta.postTokenBalances?.find((b) => b.accountIndex === index && b.mint === USDC_MINT && b.owner === m.proposal.owner);
+  if (!balance) throw new Error("Missing finalized treasury USDC balance");
+  return { solAtomic: meta.postBalances[ownerIndex]!.toString(), usdcAtomic: balance.uiTokenAmount.amount };
 }

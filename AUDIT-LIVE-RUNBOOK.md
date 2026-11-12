@@ -1,5 +1,7 @@
 # Owner-operated x402 quote procedure
 
+The subsequent managed wallet flow and separately approved unsigned-build procedure are in [LIVE-TREASURY.md](LIVE-TREASURY.md). The original quote procedure and private journal safeguards below still apply; section 8 describes the earlier offline-only state.
+
 Updated 2026-11-10. This procedure authorizes no payment. No funded signer, real paid quote, swap or payroll transfer has been run in this audit. The owner chose to handle wallet setup and public balance checks personally. The web payment relay, live swaps, live payout preparation and broadcaster remain quarantined in code.
 
 ## 1. Private local setup

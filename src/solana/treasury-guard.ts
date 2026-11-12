@@ -3,6 +3,7 @@ import { ComputeBudgetProgram, PublicKey, SystemProgram, TransactionMessage, Ver
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, decodeTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { canonicalJson } from "../domain/approval";
 import { USDC_MINT, WSOL_MINT } from "../domain/tokens";
+import { RAYDIUM_CPMM, CPMM_SWAP_INPUT } from "./raydium-cpmm";
 
 export const JUPITER_V6 = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const ROUTE = createHash("sha256").update("global:route").digest().subarray(0, 8);
@@ -12,11 +13,13 @@ export interface TreasuryProposal {
   expiresAt: string; blockhash: string; lastValidBlockHeight: number;
   maxInputAtomic: string; minOutputAtomic: string; maxSolDebitLamports: string;
   maxFeeLamports: string; maxRentLamports: string; solReserveLamports: string; slippageBps: number;
+  usdcReserveAtomic?: string;
   allocations: { id: string; milestoneId: string; recipient: string; amountAtomic: string }[];
 }
 export interface AccountSnapshot { address: string; lamports: bigint; exists: boolean; executable?: boolean; mint?: string; authority?: string; amount?: bigint }
 export interface ReviewedRoute {
   id: string;
+  kind?: "raydium-cpmm" | "jupiter-raydium-v4";
   // Must come from a separately security-reviewed registry, never providerQuote.
   remainingAccounts: { address: string; writable: boolean }[];
   innerPrograms: string[];
@@ -96,6 +99,12 @@ export function inspectTreasuryTransaction(base64: string, proposal: TreasuryPro
       } else if (proposal.kind === "swap" && ix.data.length === 1 && ix.data[0] === 17 && ix.keys.length === 1 && ix.keys[0]?.pubkey.toBase58() === source && !routes && !syncs) { syncs++; }
       else if (proposal.kind === "swap" && ix.data.length === 1 && ix.data[0] === 9 && ix.keys.length === 3 && ix.keys[0]?.pubkey.toBase58() === source && ix.keys[1]?.pubkey.toBase58() === proposal.owner && ix.keys[2]?.pubkey.toBase58() === proposal.owner && routes === 1 && !closed) { closed = true; }
       else throw new Error("Authority change, approval, account closure or unexpected token instruction");
+    } else if (program === RAYDIUM_CPMM) {
+      if (proposal.kind !== "swap" || routes++ || !funding || syncs !== 1 || ix.data.length !== 24 || !ix.data.subarray(0, 8).equals(CPMM_SWAP_INPUT) || ix.keys.length !== 13 || ix.keys[0]!.pubkey.toBase58() !== proposal.owner || !ix.keys[0]!.isSigner || ix.keys[4]!.pubkey.toBase58() !== source || ix.keys[5]!.pubkey.toBase58() !== destination || ix.data.readBigUInt64LE(8) !== BigInt(proposal.maxInputAtomic) || ix.data.readBigUInt64LE(16) < BigInt(proposal.minOutputAtomic)) throw new Error("CPMM input, minimum output, signer or destination differs from approval");
+      const accounts = ix.keys.map((key) => ({ address: key.pubkey.toBase58(), writable: key.isWritable }));
+      const reviewed = context.reviewedRoutes.find((profile) => profile.kind === "raydium-cpmm" && canonicalJson(profile.remainingAccounts) === canonicalJson(accounts));
+      if (!reviewed || ix.keys.slice(1).some((key) => key.isSigner)) throw new Error("CPMM pool lacks independent account verification");
+      inner.add(RAYDIUM_CPMM);
     } else if (program === JUPITER_V6) {
       if (proposal.kind !== "swap" || routes++ || !funding || syncs !== 1 || ix.data.length !== 35 || !ix.data.subarray(0, 8).equals(ROUTE) || ix.data.readUInt32LE(8) !== 1 || ix.data[12] !== 7 || ix.data[13] !== 100 || ix.data[14] !== 0 || ix.data[15] !== 1) throw new Error("Unsupported Jupiter route; only the reviewed exact-in single-Ray­dium ABI is decoded");
       const input = ix.data.readBigUInt64LE(16), out = ix.data.readBigUInt64LE(24), slip = ix.data.readUInt16LE(32);
@@ -104,7 +113,7 @@ export function inspectTreasuryTransaction(base64: string, proposal: TreasuryPro
       const required = [TOKEN_PROGRAM_ID.toBase58(), proposal.owner, source, destination, JUPITER_V6, USDC_MINT, JUPITER_V6, eventAuthority, JUPITER_V6];
       if (required.some((address, i) => ix.keys[i]?.pubkey.toBase58() !== address)) throw new Error("Swap accounts or destination differ from approval");
       const remaining = ix.keys.slice(9).map((key) => ({ address: key.pubkey.toBase58(), writable: key.isWritable }));
-      const reviewed = context.reviewedRoutes.find((profile) => canonicalJson(profile.remainingAccounts) === canonicalJson(remaining));
+      const reviewed = context.reviewedRoutes.find((profile) => profile.kind !== "raydium-cpmm" && canonicalJson(profile.remainingAccounts) === canonicalJson(remaining));
       if (!reviewed || ix.keys.slice(9).some((key) => key.isSigner)) throw new Error("No separately reviewed pool-account profile");
       for (const address of reviewed.innerPrograms) { if (!context.accounts.get(address)?.executable) throw new Error("Unverified route program"); inner.add(address); }
     } else throw new Error(`Unrecognized program ${program}`);
@@ -114,11 +123,12 @@ export function inspectTreasuryTransaction(base64: string, proposal: TreasuryPro
   const sourceAccount = context.accounts.get(source);
   if (!sourceAccount || (sourceAccount.exists && (sourceAccount.authority !== proposal.owner || sourceAccount.mint !== (proposal.kind === "swap" ? WSOL_MINT : USDC_MINT)))) throw new Error("Unapproved source token account");
   if (proposal.kind === "payout" && (sourceAccount.amount ?? 0n) < total) throw new Error("Insufficient USDC funding");
+  if (proposal.kind === "payout" && (!/^\d{1,20}$/.test(proposal.usdcReserveAtomic ?? "0") || (sourceAccount.amount ?? 0n) - total < BigInt(proposal.usdcReserveAtomic ?? "0"))) throw new Error("USDC reserve would be breached");
   if (proposal.kind === "swap" && (sourceAccount.amount ?? 0n) !== 0n) throw new Error("Pre-existing WSOL needs a separate reviewed spending proposal");
   const newAtas = [...created].filter((address) => !context.accounts.get(address)!.exists);
   const writable = new Set([proposal.owner, source, ...allowedAtas.keys()]);
-  if (proposal.kind === "swap") for (const ix of instructions.filter((ix) => ix.programId.toBase58() === JUPITER_V6)) {
-    for (const key of ix.keys.slice(9).filter((key) => key.isWritable)) writable.add(key.pubkey.toBase58());
+  if (proposal.kind === "swap") for (const ix of instructions.filter((ix) => [JUPITER_V6, RAYDIUM_CPMM].includes(ix.programId.toBase58()))) {
+    for (const key of (ix.programId.toBase58() === RAYDIUM_CPMM ? ix.keys : ix.keys.slice(9)).filter((key) => key.isWritable)) writable.add(key.pubkey.toBase58());
   }
   for (let i = 0; i < message.staticAccountKeys.length; i++) if (message.isAccountWritable(i) && !writable.has(message.staticAccountKeys[i]!.toBase58())) throw new Error("Unexpected writable account");
   if ([...allowedAtas].some(([address]) => !context.accounts.get(address)!.exists && !created.has(address))) throw new Error("Missing required ATA creation");
@@ -140,7 +150,7 @@ export function validateTreasurySimulation(manifest: TreasuryManifest, before: T
       const tag = ix.data[0];
       if (tag === 3 || tag === 12) {
         const source = ix.keys[0]?.pubkey.toBase58(), target = ix.keys[tag === 12 ? 2 : 1]?.pubkey.toBase58();
-        const sourceState = source ? before.accounts.get(source) : undefined, targetState = target ? (result.after.get(target) || before.accounts.get(target)) : undefined;
+        const sourceState = source ? (before.accounts.get(source)?.mint ? before.accounts.get(source) : result.after.get(source)?.mint ? result.after.get(source) : source === ata(WSOL_MINT, p.owner) && manifest.newAtas.includes(source) ? { mint: WSOL_MINT, authority: p.owner } : undefined) : undefined, targetState = target ? (result.after.get(target)?.mint ? result.after.get(target) : before.accounts.get(target)) : undefined;
         if (!sourceState?.mint || !targetState?.mint || sourceState.mint !== targetState.mint || ![WSOL_MINT, USDC_MINT].includes(sourceState.mint) || ix.data.length !== (tag === 3 ? 9 : 10)) throw new Error("Unresolved inner token movement");
         if (sourceState.authority === p.owner) {
           if (p.kind !== "swap" || source !== ata(WSOL_MINT, p.owner)) throw new Error("Unexpected additional treasury debit");
@@ -148,8 +158,10 @@ export function validateTreasurySimulation(manifest: TreasuryManifest, before: T
         }
       } else if (tag === 18 && ix.data.length === 33) {
         const address = ix.keys[0]?.pubkey.toBase58();
-        if (!address || !manifest.newAtas.includes(address) || new PublicKey(ix.data.subarray(1)).toBase58() !== manifest.ataOwners[address]) throw new Error("Unexpected token account initialization");
+        if (!address || !manifest.newAtas.includes(address) || ix.keys.length !== 2 || ix.keys[1]?.pubkey.toBase58() !== (address === ata(WSOL_MINT, p.owner) ? WSOL_MINT : USDC_MINT) || new PublicKey(ix.data.subarray(1)).toBase58() !== manifest.ataOwners[address]) throw new Error("Unexpected token account initialization");
       } else if (tag === 21 || tag === 22) {
+        if (tag === 21 && (ix.keys.length !== 1 || ![WSOL_MINT, USDC_MINT].includes(ix.keys[0]!.pubkey.toBase58()) || !(ix.data.length === 1 || (ix.data.length === 3 && ix.data.readUInt16LE(1) === 7)))) throw new Error("Unexpected token size query");
+        if (tag === 22 && (ix.data.length !== 1 || ix.keys.length !== 1)) throw new Error("Unexpected immutable-owner instruction");
         if (tag === 22 && (!ix.keys[0] || !manifest.newAtas.includes(ix.keys[0].pubkey.toBase58()))) throw new Error("Unexpected immutable-owner initialization");
       } else throw new Error("Dangerous inner token instruction");
     } else if (ix.programId.equals(SystemProgram.programId)) {

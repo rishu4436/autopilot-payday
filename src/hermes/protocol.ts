@@ -125,6 +125,7 @@ function readMinOut(quote: QuoteResponse["quotes"][number]): bigint | null {
 
 export function normalizeQuotes(body: unknown): NormalizedQuote[] {
   const parsed = quoteSchema.parse(body);
+  if (parsed.success === false) throw new Error("Provider reports unsuccessful quote response");
   return parsed.quotes.map((quote) => ({
     providerKey: quote.provider.key,
     providerName: quote.provider.name ?? null,
@@ -140,6 +141,7 @@ export function normalizeQuotes(body: unknown): NormalizedQuote[] {
 
 export function parseBuildTransaction(body: unknown): { transaction: string; provider: string | null; warnings: unknown[] } {
   const parsed = buildTxSchema.parse(body);
+  if (parsed.success === false) throw new Error("Provider reports unsuccessful unsigned build");
   return {
     transaction: parsed.transaction,
     provider: parsed.provider ?? null,

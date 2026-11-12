@@ -6,6 +6,8 @@ import { drizzle as drizzlePglite, type PgliteDatabase } from "drizzle-orm/pglit
 import * as schema from "./schema";
 import { SCHEMA_SQL } from "./sql";
 import { seedIfEmpty } from "./seed";
+import { assertPersistentHostDatabase } from "./persistence";
+import { normalizePostgresResults } from "./postgres-results";
 
 export type AppDb = PgliteDatabase<typeof schema>;
 const transactionContext = new AsyncLocalStorage<AppDb>();
@@ -20,12 +22,13 @@ const globalForDb = globalThis as unknown as {
 };
 
 async function open(): Promise<AppDb> {
+  assertPersistentHostDatabase(process.env);
   if (process.env.DATABASE_URL) {
     const postgres = (await import("postgres")).default;
     const { drizzle } = await import("drizzle-orm/postgres-js");
-    const sql = postgres(process.env.DATABASE_URL, { max: 5 });
+    const sql = postgres(process.env.DATABASE_URL, { max: 5, prepare: false, connect_timeout: 10, idle_timeout: 20 });
     await sql.unsafe(SCHEMA_SQL);
-    return drizzle(sql, { schema }) as unknown as AppDb;
+    return normalizePostgresResults(drizzle(sql, { schema })) as unknown as AppDb;
   }
   const dir = path.resolve(process.cwd(), process.env.PGLITE_DIR ?? "data/pglite");
   fs.mkdirSync(dir, { recursive: true });

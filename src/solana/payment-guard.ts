@@ -1,12 +1,12 @@
 import { ComputeBudgetProgram, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, decodeTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { type PaidPlan, validatePlan } from "../hermes/paid-plan";
+import { type PaymentPlan, validatePaymentPlan } from "../hermes/paid-plan";
 import { USDC_MINT } from "../domain/tokens";
 
 // This validates only the deliberately narrow API payment shape. Provider swap
 // instructions have no approved decoder and are always rejected by this guard.
-export function validatePaymentTransaction(tx: VersionedTransaction, plan: PaidPlan, at = Date.now()): void {
-  validatePlan(plan, at);
+export function validatePaymentTransaction(tx: VersionedTransaction, plan: PaymentPlan, at = Date.now()): void {
+  validatePaymentPlan(plan, at);
   const message = tx.message;
   if (message.version !== 0 || message.addressTableLookups.length !== 0) throw new Error("Payment lookup tables or legacy messages are not supported");
   const signers = message.staticAccountKeys.slice(0, message.header.numRequiredSignatures).map((key) => key.toBase58());

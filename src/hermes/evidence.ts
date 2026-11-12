@@ -5,18 +5,21 @@ import { decodePaymentResponse, normalizeNeed, parsePaymentRequired, selectSolan
 import { HERMES_FEE_PAYER, HERMES_PAYEE, HARD_CALL_ATOMIC, QUOTE_URL, paidPlanSchema, validatePlan } from "./paid-plan";
 import { verifySettlement } from "../solana/receipt";
 import { USDC_MINT, WSOL_MINT } from "../domain/tokens";
+import { verifyApiCapture } from "./capture-signature";
 
 const atomic = z.string().regex(/^\d{1,20}$/);
 export const paidEvidenceSchema = z.object({
   schemaVersion: z.literal(1), evidenceClass: z.literal("verified_chain"), at: z.string().datetime(), plan: paidPlanSchema,
   messageBase64: z.string().min(1).max(4096), messageHash: z.string().regex(/^[a-f0-9]{64}$/),
   receiptHeader: z.string().min(1).max(8192), responseSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  captureSignature: z.string().min(64).max(90).optional(),
   evidence: z.object({ signature: z.string().min(64).max(90), slot: z.number().int().positive(), solscan: z.string().url() }).strict(),
   quotes: z.array(z.object({ provider: z.string().min(1).max(80), inputAtomic: atomic.nullable(), outputAtomic: atomic.nullable(), minOutAtomic: atomic.nullable() }).strict()).min(1).max(50),
 }).strict();
 export type PublicPaidEvidence = z.infer<typeof paidEvidenceSchema>;
 export async function verifyPaidEvidence(raw: unknown, rpc: Connection): Promise<PublicPaidEvidence> {
   const record = paidEvidenceSchema.parse(raw), plan = validatePlan(record.plan, Date.parse(record.plan.createdAt));
+  verifyApiCapture(record);
   const message = Buffer.from(record.messageBase64, "base64"), receipt = decodePaymentResponse(record.receiptHeader);
   if (createHash("sha256").update(message).digest("hex") !== record.messageHash || !receipt.ok || receipt.transaction !== record.evidence.signature) throw new Error("Evidence message/receipt mismatch");
   if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Evidence needs mainnet RPC");

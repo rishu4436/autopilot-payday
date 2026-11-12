@@ -49,6 +49,24 @@ beforeEach(async () => {
 }, 60_000);
 
 describe("real database authorization and payroll regressions", () => {
+  it("requires HTTPS for hosted financial origins while accepting the configured secure host", async () => {
+    state.headers.set("host", "payday.example"); state.headers.set("origin", "http://payday.example"); process.env.APP_ORIGIN = "http://payday.example";
+    await expect(requestDomain()).rejects.toThrow("HTTPS");
+    state.headers.set("origin", "https://payday.example"); process.env.APP_ORIGIN = "https://payday.example";
+    await expect(requestDomain()).resolves.toBe("payday.example");
+  });
+  it("signs into a provisioned non-demo organization without assuming Northstar membership", async () => {
+    const db = await getDb(), key = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(99)), address = bs58.encode(key.publicKey);
+    await db.insert(schema.organizations).values({ id: "org_live_provisioned", name: "Real workspace fixture", slug: "live-auth-fixture", projectName: "Payroll", mode: "live_readonly", liveEnabled: false, createdAt: new Date() });
+    await db.insert(schema.users).values({ id: "user_live_fixture", displayName: "Live fixture owner", walletAddress: address, createdAt: new Date() });
+    await db.insert(schema.members).values({ id: "member_live_fixture", orgId: "org_live_provisioned", userId: "user_live_fixture", role: "owner", createdAt: new Date() });
+    process.env.APP_MODE = "live_readonly";
+    const challenge = await startChallenge(address, "127.0.0.1:3100");
+    if (!challenge || !("nonce" in challenge)) throw new Error("Expected challenge");
+    const signature = bs58.encode(nacl.sign.detached(new TextEncoder().encode(challenge.message), key.secretKey));
+    expect((await finishChallenge(address, signature, challenge.nonce, "127.0.0.1:3100"))?.ok).toBe(true);
+    expect((await getSession())?.orgId).toBe("org_live_provisioned");
+  });
   it("uses one database initialization promise for concurrent requests", async () => {
     const values = await Promise.all(Array.from({ length: 8 }, () => getDb()));
     expect(new Set(values).size).toBe(1);

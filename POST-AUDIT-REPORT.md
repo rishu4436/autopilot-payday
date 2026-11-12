@@ -1,5 +1,7 @@
 # Post-audit remediation and live x402 proof readiness
 
+Historical 2026-11-10 snapshot. The subsequent controlled swap/payroll implementation and its still-disabled-by-default release gates are documented in [LIVE-TREASURY.md](LIVE-TREASURY.md). Historical test counts and unexecuted-mainnet observations below are preserved.
+
 2026-11-10, `D:\payday`. Historical inputs reviewed: `AUDIT-REPORT.md`, `AUDIT-LIVE-RUNBOOK.md`, `audit/verification-summary.json`, `audit/changed-files.json`. The previous 92-test/24-browser audit remains preserved. This report describes the subsequent work.
 
 **Result: the fixed-plan x402 component passes its automated offline security gate. Genuine paid integration remains unproven. Live swaps and payroll remain blocked.** No funded signer was started, no owner keypair was inspected, and no real financial signature, payment, swap or payout occurred. Deterministic unfunded test signatures and simulated receipts are test fixtures only.

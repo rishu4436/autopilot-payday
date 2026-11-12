@@ -9,6 +9,7 @@ export async function requestDomain(): Promise<string> {
     throw new Error("APP_ORIGIN is required for a non-loopback deployment");
   }
   const expected = new URL(configured || `http://${host}`);
+  if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(expected.host) && expected.protocol !== "https:") throw new Error("Non-loopback deployments require HTTPS");
   if (host !== expected.host) throw new Error("Unexpected request host");
   if (h.get("origin") !== expected.origin) throw new Error("Cross-origin mutation rejected");
   const site = h.get("sec-fetch-site");

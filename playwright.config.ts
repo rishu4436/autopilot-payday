@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 export default defineConfig({
   testDir: "e2e",
+  outputDir: "test-results/demo",
   timeout: 60_000,
   expect: { timeout: 15_000 },
   workers: 1,

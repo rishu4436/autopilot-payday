@@ -3,17 +3,19 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { Connection } from "@solana/web3.js";
-import { planHash, validatePlan } from "../src/hermes/paid-plan";
+import { BUILD_URL, planHash, validatePaymentPlan } from "../src/hermes/paid-plan";
 import { verifySettlement } from "../src/solana/receipt";
 import { PaymentJournal } from "../services/x402-signer/journal";
 import { privatePath } from "../services/x402-signer/private-path";
-import { decodePaymentResponse, normalizeQuotes } from "../src/hermes/protocol";
+import { decodePaymentResponse, normalizeQuotes, parseBuildTransaction } from "../src/hermes/protocol";
 import { paidEvidenceSchema } from "../src/hermes/evidence";
+import { paidBuildEvidenceSchema } from "../src/hermes/build-evidence";
+import { verifyApiCapture } from "../src/hermes/capture-signature";
 
 async function main() {
   if (!process.env.X402_APPROVED_PLAN || !process.env.X402_JOURNAL_DIR) throw new Error("Set the public approval plan path and the existing private journal directory");
   const raw = JSON.parse(readFileSync(privatePath(process.env.X402_APPROVED_PLAN), "utf8"));
-  const plan = validatePlan(raw, Date.parse(raw.createdAt));
+  const plan = validatePaymentPlan(raw, Date.parse(raw.createdAt));
   const directory = privatePath(process.env.X402_JOURNAL_DIR), journal = new PaymentJournal(directory);
   const row = journal.rows().filter((row) => row.planId === plan.id).at(-1);
   if (!row?.messageBase64 || row.hash !== planHash(plan)) throw new Error("No persisted approved message for this plan");
@@ -29,9 +31,10 @@ async function main() {
     const response = JSON.parse(readFileSync(join(directory, "evidence", `${plan.id}-response.json`), "utf8"));
     const receipt = decodePaymentResponse(response.receipt);
     if (response.status !== 200 || typeof response.body !== "string" || !receipt.ok || receipt.transaction !== signature || response.receipt !== row.receiptHeader) throw new Error("Settlement verified but no matching successful original quote response was captured");
-    const quotes = normalizeQuotes(JSON.parse(response.body));
-    const recovered = paidEvidenceSchema.parse({ schemaVersion: 1, evidenceClass: "verified_chain", at: new Date().toISOString(), plan, messageBase64: row.messageBase64, messageHash: createHash("sha256").update(Buffer.from(row.messageBase64, "base64")).digest("hex"), receiptHeader: response.receipt, responseSha256: createHash("sha256").update(response.body).digest("hex"), evidence,
-      quotes: quotes.map((q) => ({ provider: q.providerKey, inputAtomic: q.inputAmount, outputAtomic: q.outputAmount, minOutAtomic: q.minOutAtomic?.toString() ?? null })) });
+    const base = { schemaVersion: 1, evidenceClass: "verified_chain", at: new Date().toISOString(), plan, messageBase64: row.messageBase64, messageHash: createHash("sha256").update(Buffer.from(row.messageBase64, "base64")).digest("hex"), receiptHeader: response.receipt, responseSha256: createHash("sha256").update(response.body).digest("hex"), evidence, ...(response.captureSignature ? { captureSignature: response.captureSignature } : {}) };
+    const parsedBody = JSON.parse(response.body);
+    const recovered = plan.url === BUILD_URL ? paidBuildEvidenceSchema.parse({ ...base, build: { transaction: parseBuildTransaction(parsedBody).transaction, provider: parseBuildTransaction(parsedBody).provider } }) : paidEvidenceSchema.parse({ ...base, quotes: normalizeQuotes(parsedBody).map((q) => ({ provider: q.providerKey, inputAtomic: q.inputAmount, outputAtomic: q.outputAmount, minOutAtomic: q.minOutAtomic?.toString() ?? null })) });
+    verifyApiCapture(recovered, plan.url === BUILD_URL);
     writeFileSync(join(directory, "evidence", `${plan.id}-verified.json`), JSON.stringify(recovered, null, 2), { flag: "wx", mode: 0o600 });
     quoteResponseRecovered = true;
   }

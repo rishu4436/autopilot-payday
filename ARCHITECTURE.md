@@ -1,5 +1,7 @@
 # Architecture
 
+Current controlled treasury execution is documented in [LIVE-TREASURY.md](LIVE-TREASURY.md). Its draft/approval/signed/unknown/finality ledger and wallet UI supersede older statements below that no managed broadcaster or instruction authorization exists. The release remains disabled by default; the legacy generic broadcaster remains quarantined.
+
 Autopilot Payday is one Next.js application. Modules replace a multi-package build so Windows and CI can typecheck a single project. The boundaries are still separate.
 
 | Path | Responsibility |

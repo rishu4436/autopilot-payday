@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "db:seed": "tsx src/db/cli.ts seed",
     "signer": "tsx services/x402-signer/server.ts",
     "live:discover": "tsx scripts/live-discover.ts",
@@ -24,7 +25,11 @@
     "live:prepare-quote": "tsx scripts/prepare-paid-quote.ts",
     "live:reconcile": "tsx scripts/reconcile-payment.ts",
     "live:recover-lock": "tsx scripts/recover-signer-lock.ts",
-    "live:import-evidence": "tsx scripts/import-paid-evidence.ts"
+    "live:import-evidence": "tsx scripts/import-paid-evidence.ts",
+    "live:prepare-build": "tsx scripts/prepare-paid-build.ts",
+    "live:paid-build": "tsx scripts/live-paid-quote.ts --paid-build",
+    "live:export-swap-build": "tsx scripts/export-swap-build.ts",
+    "live:provision-org": "tsx scripts/provision-live-org.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

@@ -1,50 +1,34 @@
-# Deployment
+# Website deployment
 
-The app can be hosted as a Next.js server. Do not deploy the x402 signer next to it, and do not put `PAYER_KEYPAIR` in the host's environment.
+Autopilot Payday is a Next.js website and can be hosted on Vercel with persistent PostgreSQL. The controlled swap/payroll implementation is described in [LIVE-TREASURY.md](LIVE-TREASURY.md). It is disabled by default pending independent review. No deployment, paid operation or mainnet transfer is claimed by these instructions.
 
-## Production data
+## Read-only host configuration
 
-Use Postgres. PGlite on a serverless disk will not survive a restart.
+Configure variables privately in the host, using the exact final HTTPS origin:
 
 ```
-DATABASE_URL=postgres://...
-SESSION_SECRET=a long random string
+DATABASE_URL=<dedicated persistent PostgreSQL connection URL>
+APP_ORIGIN=https://<your actual deployment domain>
 APP_MODE=live_readonly
 LIVE_OPERATIONS=false
-SOLANA_RPC_URL=https://your-rpc.example
-SOLANA_CLUSTER=mainnet-beta
+TREASURY_EXECUTION_ENABLED=false
+SOLANA_RPC_URL=<trusted mainnet RPC URL>
+SOLANA_VERIFICATION_RPC_URL=<preferably independent trusted mainnet RPC URL>
 HERMES_BASE_URL=https://hermes.swap.io
 ```
 
-Leave `X402_SIGNER_URL` empty on the host. Paid calls then fail closed with a clear message.
+Use the Next.js framework preset, pnpm 9.15.4, Node 22 or newer, `pnpm install --frozen-lockfile` and `pnpm build`. Vercel uses its Next.js integration; it does not run a persistent `pnpm start` daemon. A self-hosted persistent Node deployment can use `pnpm start` instead. Keep the project root at the repository root so public evidence resolves.
 
-## Build
+The app refuses missing `DATABASE_URL` on Vercel/Lambda/Netlify instead of losing attempt state on an ephemeral disk. Use separate databases and matching `APP_ORIGIN` values for preview and production. The raw SQL adapter handles the PostgreSQL driver's native RowList shape; do not remove it. The schema is initialized on database opening; run provisioning privately before admitting users. Native hosted database deployment/load behavior still needs operator validation.
 
-```powershell
-pnpm install --frozen-lockfile
-pnpm exec tsc --noEmit
-pnpm test
-pnpm build
-pnpm start
-```
+Provision a new non-demo owner workspace using only public addresses, following [LIVE-TREASURY.md](LIVE-TREASURY.md). No seeded Northstar data is promoted. Wallet sign-in selects the eligible organization from current membership rather than assuming Northstar. In read-only mode the owner can inspect supported transaction previews; no on-chain submission is enabled.
 
-Run the process from the repository root so `src/db/sql.ts` and the fixtures resolve. The Node server must be long-lived. A locked-down VM or container with a Postgres URL is a better fit than a stateless function.
+For a public competition simulation instead, use a **dedicated demo database**, `APP_MODE=demo`, `ALLOW_DEMO_SEED=true`, and both live flags false. Demo seeding never occurs on an external database without the explicit opt-in. Shared public demo users can modify that demo ledger; never connect it to real financial organizations.
 
-## Live execution
+## Private signer and later live activation
 
-Keep the signer on a machine the owner controls:
+Never deploy/proxy/tunnel the local x402 signer or upload `PAYER_KEYPAIR`, `X402_SIGNER_TOKEN`, approval-plan private files or journals. The website imports only the owner's existing verified build bundle. API quote/build purchases are performed locally after separate exact-plan approvals.
 
-- Firewall it to localhost.
-- Fund it with a small USDC balance.
-- Set `LIVE_OPERATIONS=true` only on the deployment that should broadcast, and arm the switch in Settings while signed in as the owner.
-- Treasury signing still happens in the owner's browser wallet.
+After independent security review, actual live activation additionally requires `APP_MODE=live`, `LIVE_OPERATIONS=true`, `TREASURY_EXECUTION_ENABLED=true`, the exact reviewed release marker and the explicit administrative organization enable command. See the live runbook. No Settings toggle or environment flag alone grants financial authority, and every transaction still needs owner wallet signatures. Leave these disabled until the real review and exact financial approvals have occurred.
 
-## Secrets checklist
-
-- `.env.local`, `data/`, and `secrets/` are gitignored.
-- Do not upload a keypair to a preview host.
-- Rotate `X402_SIGNER_TOKEN` if it was ever pasted into a log.
-# Audit deployment restriction
-
-This code is approved only conditionally for a labeled simulated/live-unpaid demo, not production financial use. Web payments, provider swaps and payouts are quarantined. Use a dedicated demo database; external PostgreSQL is not seeded unless both demo mode and `ALLOW_DEMO_SEED=true` are explicitly configured. Set a canonical `APP_ORIGIN`; hosted HTTPS retains secure cookies. The local `COOKIE_SECURE=false` exception only applies to HTTP loopback. Never proxy, tunnel or deploy the local signer, or place its token/keypair in web app configuration. See [AUDIT-REPORT.md](AUDIT-REPORT.md) and [AUDIT-LIVE-RUNBOOK.md](AUDIT-LIVE-RUNBOOK.md) before using earlier deployment instructions below.
-
+Health at `/api/health` identifies Payday and reports disabled/owner-approval-gated execution. Exercise wallet-origin checks, both supported flows, provider formats, persistent recovery and independent RPC finality in the intended host before describing it as production-ready. Check local tests with `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:e2e` and `pnpm test:e2e:live`.

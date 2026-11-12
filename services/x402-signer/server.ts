@@ -2,18 +2,20 @@ import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, wr
 import { join } from "node:path";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { planHash, validatePlan } from "../../src/hermes/paid-plan";
+import { BUILD_URL, planHash, validatePaymentPlan } from "../../src/hermes/paid-plan";
 import { USDC_MINT } from "../../src/domain/tokens";
 import { verifySettlement } from "../../src/solana/receipt";
 import { createSignerServer } from "./http-server";
-import { executePaidQuote } from "./execute";
+import { executePaidQuote, executePaidBuild, type PaidQuoteDependencies } from "./execute";
 import { PaymentJournal } from "./journal";
 import { privatePath } from "./private-path";
+import { signApiCapture } from "../../src/hermes/capture-signature";
 async function main() {
-  if (process.env.LIVE_OPERATIONS !== "true" || !process.argv.includes("--enable-paid-quote")) throw new Error("Paid signer disabled; separate exact-plan approval is required");
+  if (process.env.LIVE_OPERATIONS !== "true" || (!process.argv.includes("--enable-paid-quote") && !process.argv.includes("--enable-paid-build"))) throw new Error("Paid signer disabled; separate exact-plan approval is required");
   const token = process.env.X402_SIGNER_TOKEN;
   if (!token || token.length < 32 || !process.env.PAYER_KEYPAIR || !process.env.X402_APPROVED_PLAN || !process.env.X402_APPROVED_PLAN_SHA256 || !process.env.X402_JOURNAL_DIR) throw new Error("Missing private local signer configuration");
-  const plan = validatePlan(JSON.parse(readFileSync(privatePath(process.env.X402_APPROVED_PLAN), "utf8")));
+  const plan = validatePaymentPlan(JSON.parse(readFileSync(privatePath(process.env.X402_APPROVED_PLAN), "utf8")));
+  if (plan.url === BUILD_URL ? !process.argv.includes("--enable-paid-build") : !process.argv.includes("--enable-paid-quote")) throw new Error("Approval opt-in does not match this operation");
   if (planHash(plan) !== process.env.X402_APPROVED_PLAN_SHA256) throw new Error("Plan differs from owner approval");
   const secret: unknown = JSON.parse(readFileSync(privatePath(process.env.PAYER_KEYPAIR), "utf8"));
   if (!Array.isArray(secret) || secret.length !== 64 || secret.some((v) => !Number.isInteger(v) || v < 0 || v > 255)) throw new Error("Invalid private keypair file");
@@ -35,7 +37,7 @@ async function main() {
     try { writeFileSync(fd, JSON.stringify(value, null, 2)); fsyncSync(fd); } finally { closeSync(fd); }
   };
   const server = createSignerServer({ token, plan, execute: async () => {
-    const record = await executePaidQuote(plan, journal, {
+    const deps: PaidQuoteDependencies = {
       rpcUrl: rpc.rpcEndpoint,
       balance: async () => {
         const account = await getAccount(rpc, getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), payer.publicKey));
@@ -49,13 +51,18 @@ async function main() {
       },
       sign: async (tx) => { tx.sign([payer]); return tx; },
       verify: (signature, message) => verifySettlement(verificationRpc, signature, plan, message),
-      captureResponse: async (text, status, receipt) => save(`${plan.id}-response.json`, { status, receipt, body: text }),
+      captureResponse: async (text, status, receipt) => {
+        const captureSignature = signApiCapture(plan, text, status, receipt, payer.secretKey);
+        save(`${plan.id}-response.json`, { status, receipt, body: text, captureSignature });
+        return captureSignature;
+      },
       save: async (verified) => save(`${plan.id}-verified.json`, verified),
-    });
+    };
+    const record = plan.url === BUILD_URL ? await executePaidBuild(plan, journal, deps) : await executePaidQuote(plan, journal, deps);
     return { status: 200, record };
   } });
   const release = () => { closeSync(lockFd); unlinkSync(lockPath); };
-  server.listen(8787, "127.0.0.1", () => console.log(`One approved quote only; 127.0.0.1:8787; payer ${plan.payer}; plan ${plan.id}`));
+  server.listen(8787, "127.0.0.1", () => console.log(`One approved ${plan.url === BUILD_URL ? "unsigned build" : "quote"} only; 127.0.0.1:8787; payer ${plan.payer}; plan ${plan.id}`));
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => server.close(() => { release(); process.exit(0); }));
   server.on("error", () => { release(); process.exitCode = 1; });
 }

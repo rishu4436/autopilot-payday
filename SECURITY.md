@@ -1,42 +1,29 @@
 # Security
 
-This is a treasury application with a narrow authority model. It is not an audit, and it is not an unrestricted agent wallet.
+The current managed treasury implementation, gate configuration and limitations are in [LIVE-TREASURY.md](LIVE-TREASURY.md). Historical findings are preserved in [AUDIT-REPORT.md](AUDIT-REPORT.md) and [POST-AUDIT-REPORT.md](POST-AUDIT-REPORT.md). Automated tests are not an independent external security audit. No funded/mainnet execution was performed during implementation.
 
-## Custody
+## Authority and custody
 
-- The owner signs treasury swaps and payouts in Phantom or Solflare.
-- The server can broadcast a transaction only after the signed message bytes match the authorized unsigned transaction and the fee payer is the treasury wallet.
-- The x402 secret is read by `services/x402-signer` from `PAYER_KEYPAIR` on the local machine. The Next.js process never receives that file.
-- The signer listens on 127.0.0.1 and checks a bearer token.
-- Logs redact fields whose names look like secrets or keypairs. Do not put a seed phrase in the database, the browser, or a prompt.
+The treasury owner signs a readable immutable proposal message and then the exact transaction in Phantom/Solflare. Neither the server nor the agent has a treasury private key. Current database session, organization membership, owner wallet, policy, pause, recipient allowlist and locked milestone amount/address are checked again before submission. A demo organization cannot be promoted or used for live execution. New live provisioning uses public addresses only.
 
-## Gates before an API payment
+The website never loads the local x402 payer keypair or bearer capability. That process binds only IPv4 loopback, authenticates all endpoints and refuses browser/proxy/rebinding requests. It signs only a fixed-plan sponsored USDC API payment, not a provider's unsigned treasury transaction. Independently pinned mint, payee, facilitator, URL/body, expiry, per-call/day/lifetime limits and fresh reserves are enforced. Quote and build are different exact approvals sharing one durable journal. Stop that separate process to revoke it; the website's pause does not control it.
 
-The unpaid 402 is parsed first. Payment proceeds only when the network is Solana, the asset is USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, the recipient is on the latest discovery allowlist, the amount is inside the per-call and daily limits, the payer stays above its reserve, and the agent is not paused.
+The local payer also signs only its own domain-separated HTTP-capture digest, after the actual response arrives. Build import requires this signature to bind request/response/receipt and reject edited browser uploads. It is never a generic caller-supplied message signing endpoint and does not authorize a treasury transfer. Settlement is verified independently; the capture signature does not attest the truth of market prices.
 
-A paid HTTP 200 without a successful `X-PAYMENT-RESPONSE` is unverified. The body is not used as a quote. Unknown settlement is not retried.
+## Instruction and settlement checks
 
-## Gates before a payout
+The first live swap path supports only direct Raydium CPMM SOL/USDC. Independent RPC account ownership/layout/PDA/config/oracle/vault checks define the profile. Exact ABI, one treasury signer, canonical asset accounts, maximum input, minimum output, fee/rent/reserves and simulated CPI effects are enforced. Lookup table ownership/state is verified and addresses flattened before owner review. Unknown routes, Token-2022, authority changes, arbitrary programs and oversized transactions fail closed. Checked USDC payroll and constrained raw/parsed account-creation CPI are decoded separately.
 
-- Milestone must be approved, unpaid, allowlisted, and locked to the same recipient.
-- Each milestone can appear in only one batch item.
-- The batch authorization hash is checked again at execution.
-- Failed chain results can be retried as a new attempt. Unknown results cannot.
-- Demo partial failure is a labeled ledger control, not a network event.
+Signed bytes and the deterministic signature are committed before UNKNOWN is committed and the network call begins. There is one managed dispatch, no automatic re-signing or replacement. Unknown attempts hold their allocations/wallet. Finalized RPC status, identical message/signature and exact asset effects are required before payroll is marked PAID. Confirmed claims are permanent; finalized failure releases only its own claims. Accounting application and observation slots prevent old receipts/failures from reverting new balances or payments. Reconciliation can continue when new submissions are disabled or paused.
 
-## Live arming
+Legacy generic broadcasters/pasted signed-transaction entry points remain quarantined. The new service has explicit release/deployment/organization gates, all disabled by default. The review marker is an operator acknowledgment, not independent audit evidence. Every transaction still requires its own exact wallet approval after a deployment is armed.
 
-Live broadcast requires both `LIVE_OPERATIONS=true` and the owner switch in Settings. Either one alone does not send money.
+## Hosting and remaining assumptions
 
-## Remaining risk
+Use HTTPS and a fixed `APP_ORIGIN`; non-loopback HTTP mutations are refused. Cookies are random, httpOnly, same-site database session identifiers with secure production transport; the HTTP exception is loopback only. There is no JWT/session signing secret variable to invent. Nonce consumption and current membership are revalidated; multiple eligible organizations fail closed until explicit selection exists.
 
-- Hermes swap transactions are checked for fee payer and message equality, then simulated by RPC when a live build exists. They are not formally decoded instruction by instruction. The owner still has to read the wallet prompt.
-- There is no strict Content-Security-Policy, because wallet adapters need room to run. Other hardening headers are set.
-- Session ids are random and httpOnly. Set `SESSION_SECRET` before any production host even though the current cookie is the random session id, not a signed JWT.
-- PGlite on a laptop disk is not a hosted production database.
-- Rate limits are in-process. They reset when the server restarts.
-- A client test and a clean build are not a security audit.
-# Audit amendment — 2026-11-10
+Vercel/serverless hosts require persistent PostgreSQL and cannot fall back to local PGlite. Raw postgres-js RowList results are normalized, including transactional/savepoint callbacks, so authorization/CAS checks use the same result contract as local PGlite. Test database and RPC fixtures are isolated and never point at owner funds.
 
-The current security disposition and remaining risks are in [AUDIT-REPORT.md](AUDIT-REPORT.md). Web financial execution, provider swaps, and live payout broadcasting are quarantined in code. Prior descriptions below of live gating or recovery describe intended behavior and must not be taken as verified readiness. A local paid quote requires the exact separately approved plan and durable journal in [AUDIT-LIVE-RUNBOOK.md](AUDIT-LIVE-RUNBOOK.md). No real paid integration was executed during the audit.
+Trust remains in the local OS/private file ACLs, database, wallet software, RPC data and pinned provider programs (including their upgrade authorities). A local response hash does not cryptographically attest market prices. Same-user processes can read a key/token or rewrite a local journal; never reset/move the journal to evade a hold. Expired unsigned/unknown attempts may require manual chain forensics. There is no autonomous signing worker, negative-reconciliation shortcut, unlimited generic execution or production-readiness certification.
 
+Keep keypairs, signer capabilities, raw provider payloads and signed transaction authorizations outside the checkout and public evidence. Never share them in chat or deploy them with the website. Public receipts prove only the operations their actual chain evidence supports. Unsupported provider formats, actual hosted PostgreSQL/network behavior, funded wallet operations and independent external review remain real-world validation work.

@@ -2,10 +2,10 @@ import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
 import { USDC_MINT } from "../domain/tokens";
-import { type PaidPlan } from "../hermes/paid-plan";
+import { type PaymentPlan } from "../hermes/paid-plan";
 import { validatePaymentTransaction } from "./payment-guard";
 
-export async function verifySettlement(rpc: Connection, signature: string, plan: PaidPlan, expectedMessage: Uint8Array): Promise<{ signature: string; slot: number; solscan: string }> {
+export async function verifySettlement(rpc: Connection, signature: string, plan: PaymentPlan, expectedMessage: Uint8Array): Promise<{ signature: string; slot: number; solscan: string }> {
   if (bs58.decode(signature).length !== 64) throw new Error("Receipt signature is invalid");
   const status = (await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
   if (!status || status.err || !["confirmed", "finalized"].includes(status.confirmationStatus || "")) throw new Error("Payment is not confirmed; settlement remains uncertain");

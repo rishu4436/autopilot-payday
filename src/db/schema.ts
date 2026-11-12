@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" }).notNull();
 
@@ -57,6 +57,7 @@ export const treasuryAccounts = pgTable("treasury_accounts", {
   usdcAtomic: text("usdc_atomic").notNull(),
   source: text("source").notNull(),
   observedAt: ts("observed_at"),
+  observedSlot: bigint("observed_slot", { mode: "number" }),
 });
 
 export const policies = pgTable("policies", {

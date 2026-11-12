@@ -1,4 +1,9 @@
 export const SCHEMA_SQL = `
+create table if not exists treasury_drafts (
+  id text primary key, org_id text not null, user_id text not null,
+  unsigned_base64 text not null, manifest text not null,
+  source_id text, expires_at timestamptz not null, created_at timestamptz not null default now()
+);
 create table if not exists treasury_attempts (
   id text primary key, org_id text not null, batch_id text, proposal_hash text not null,
   message_hash text not null, manifest text not null, approval_signature text not null,
@@ -8,6 +13,11 @@ create table if not exists treasury_attempts (
   unique(org_id, proposal_hash), unique(org_id, message_hash)
 );
 alter table treasury_attempts add column if not exists batch_id text;
+alter table treasury_attempts add column if not exists draft_id text;
+alter table treasury_attempts add column if not exists source_key text;
+alter table treasury_attempts add column if not exists accounting_applied boolean not null default false;
+create unique index if not exists treasury_attempt_draft on treasury_attempts(draft_id) where draft_id is not null;
+create unique index if not exists treasury_swap_source on treasury_attempts(org_id,source_key) where source_key is not null and state<>'FAILED';
 create table if not exists treasury_allocation_claims (
   org_id text not null, milestone_id text not null, attempt_id text not null references treasury_attempts(id),
   allocation_id text not null, recipient text not null, amount_atomic text not null,
@@ -66,6 +76,7 @@ create table if not exists treasury_accounts (
   source text not null,
   observed_at timestamptz not null
 );
+alter table treasury_accounts add column if not exists observed_slot bigint;
 create table if not exists policies (
   id text primary key,
   org_id text not null,

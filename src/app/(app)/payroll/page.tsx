@@ -1,6 +1,8 @@
 import { ActionForm } from "@/components/action-form";
 import { redirect } from "next/navigation";
-import { batchAction, batchDecisionAction, partialAction, payoutAction, preparePayoutAction } from "@/server/actions";
+import { batchAction, batchDecisionAction, partialAction, payoutAction } from "@/server/actions";
+import { TreasuryWallet } from "@/components/treasury-wallet";
+import { treasuryExecutionEnabled } from "@/server/live-treasury";
 import { getWorkspace } from "@/server/read";
 import { REFERENCE_SIGNATURE_FEE_LAMPORTS, REFERENCE_TOKEN_ACCOUNT_RENT_LAMPORTS } from "@/domain/tokens";
 import { formatAtomic } from "@/domain/money";
@@ -47,9 +49,7 @@ export default async function PayrollPage() {
                 <ActionForm action={partialAction}><input type="hidden" name="id" value={batch.id} /><button className="btn amber" type="submit">Demo partial failure</button></ActionForm>
               </div>
             )}
-            {batch.status === "APPROVED" && data.books.org.mode === "live" && (
-              <ActionForm action={preparePayoutAction}><input type="hidden" name="id" value={batch.id} /><button className="btn" type="submit">Build unsigned payout</button></ActionForm>
-            )}
+            {data.books.org.mode !== "demo" && batch.evidenceClass !== "simulated" && data.session.role === "owner" && ["APPROVED", "PARTIAL", "UNKNOWN", "CONFIRMING", "CONFIRMED"].includes(batch.status) && <TreasuryWallet kind="payout" batchId={batch.id} treasury={data.books.treasury.address} canPrepare={batch.status !== "CONFIRMED"} submissionEnabled={treasuryExecutionEnabled() && data.books.org.mode === "live" && data.books.org.liveEnabled && process.env.APP_MODE === "live"} />}
           </section>
         );
       })}

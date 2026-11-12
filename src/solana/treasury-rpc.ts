@@ -1,7 +1,7 @@
 // Read-only adapter. Never loads a keypair, signs, builds a paid request or broadcasts.
-import { Connection, PublicKey, SystemProgram, TransactionInstruction, VersionedTransaction, type AccountInfo } from "@solana/web3.js";
+import { Connection, PublicKey, SystemProgram, VersionedTransaction, type AccountInfo } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, unpackAccount } from "@solana/spl-token";
-import bs58 from "bs58";
+import { decodeRpcInstruction } from "./rpc-instructions";
 import { inspectTreasuryTransaction, validateTreasurySimulation, type AccountSnapshot, type ReviewedRoute, type TreasuryContext, type TreasuryProposal } from "./treasury-guard";
 
 function snapshot(address: PublicKey, info: AccountInfo<Buffer> | null): AccountSnapshot {
@@ -39,15 +39,7 @@ export async function inspectTreasuryFromRpc(rpc: Connection, base64: string, pr
     if (value && (value.data.length !== 2 || value.data[1] !== "base64")) throw new Error("Unsupported simulated account encoding");
     return [key.toBase58(), snapshot(key, value ? { ...value, owner: new PublicKey(value.owner), data: Buffer.from(value.data[0]!, "base64"), rentEpoch: value.rentEpoch ?? 0 } : null)] as const;
   }));
-  const innerInstructions = (result.innerInstructions ?? []).flatMap((group) => group.instructions.map((ix) => {
-    // Parsed CPI summaries lose original bytes. Refuse them until an exact decoder is reviewed.
-    if (!("data" in ix)) throw new Error("Parsed-only inner instructions require independent review");
-    return new TransactionInstruction({ programId: ix.programId, data: Buffer.from(bs58.decode(ix.data)), keys: ix.accounts.map((address) => {
-      const index = keys.findIndex((key) => key.equals(address));
-      if (index < 0) throw new Error("Unresolved inner instruction account");
-      return { pubkey: keys[index]!, isSigner: tx.message.isAccountSigner(index), isWritable: tx.message.isAccountWritable(index) };
-    }) });
-  }));
+  const innerInstructions = (result.innerInstructions ?? []).flatMap((group) => group.instructions.map((ix) => decodeRpcInstruction(ix, tx.message)));
   const simulation = { err: result.err, logs: result.logs, after, innerInstructions };
   validateTreasurySimulation(manifest, before, simulation);
   return { manifest, validation: { before, simulation }, snapshotSlot: accounts.context.slot, simulationSlot: simulated.context.slot };

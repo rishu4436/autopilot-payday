@@ -176,8 +176,11 @@ export async function finishChallenge(address: string, signature: string, nonce:
   if (consumed.length !== 1) return fail("Challenge expired or was already consumed", "REPLAY");
   const user = (await db.select().from(users).where(eq(users.walletAddress, address)).limit(1))[0];
   if (!user) return fail("This wallet is not a member. An owner can register it in Settings.");
-  const member = (await db.select().from(members).where(and(eq(members.userId, user.id), eq(members.orgId, "org_northstar"))).limit(1))[0];
-  if (!member || !isRole(member.role)) return fail("This wallet has no role on the organization.");
+  const membershipRows = await db.select({ orgId: members.orgId, role: members.role, mode: organizations.mode }).from(members).innerJoin(organizations, eq(members.orgId, organizations.id)).where(eq(members.userId, user.id));
+  const eligible = membershipRows.filter((member) => isRole(member.role) && ((process.env.APP_MODE || "demo") === "demo" ? member.mode === "demo" : member.mode !== "demo"));
+  if (eligible.length !== 1) return fail(eligible.length > 1 ? "This wallet has multiple organizations. Explicit organization selection is required before sign-in." : "This wallet has no role on an organization in this deployment mode.");
+  const member = eligible[0]!;
+  if (!isRole(member.role)) return fail("Invalid organization role");
   const id = crypto.randomUUID();
   await db.insert(sessions).values({
     id,
@@ -992,8 +995,8 @@ async function refreshBalancesImpl(session: Session): Promise<ActionState> {
   try {
     const treasury = await readChainBalances(books.treasury.address);
     const payer = await readChainBalances(books.payer.address);
-    await db.update(treasuryAccounts).set({ solAtomic: treasury.solAtomic.toString(), usdcAtomic: treasury.usdcAtomic.toString(), source: "rpc", observedAt: new Date() }).where(eq(treasuryAccounts.id, books.treasury.id));
-    await db.update(treasuryAccounts).set({ solAtomic: payer.solAtomic.toString(), usdcAtomic: payer.usdcAtomic.toString(), source: "rpc", observedAt: new Date() }).where(eq(treasuryAccounts.id, books.payer.id));
+    await db.update(treasuryAccounts).set({ solAtomic: treasury.solAtomic.toString(), usdcAtomic: treasury.usdcAtomic.toString(), source: "rpc", observedAt: new Date(), observedSlot: treasury.slot }).where(and(eq(treasuryAccounts.id, books.treasury.id), sql`(${treasuryAccounts.observedSlot} is null or ${treasuryAccounts.observedSlot}<=${treasury.slot})`));
+    await db.update(treasuryAccounts).set({ solAtomic: payer.solAtomic.toString(), usdcAtomic: payer.usdcAtomic.toString(), source: "rpc", observedAt: new Date(), observedSlot: payer.slot }).where(and(eq(treasuryAccounts.id, books.payer.id), sql`(${treasuryAccounts.observedSlot} is null or ${treasuryAccounts.observedSlot}<=${payer.slot})`));
     return ok(`Balances read from RPC at slot ${treasury.slot}. USD value is unavailable.`);
   } catch {
     return fail("RPC did not return balances. Existing figures were left unchanged.", "RPC_OUTAGE");

@@ -1,5 +1,7 @@
 # Testing
 
+The current managed-wallet suite adds real SQL/driver, raw/parsed CPI, on-chain pool-layout, replay/timeout/partial/finality and synthetic browser-wallet coverage. Run `pnpm test:e2e:live` after building. See [LIVE-TREASURY.md](LIVE-TREASURY.md) and ignored `audit/live-execution/verification.json` for the latest results. Older counts below describe the historical audit.
+
 ## Unit
 
 ```powershell

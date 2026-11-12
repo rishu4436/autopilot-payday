@@ -1,6 +1,6 @@
 // Explicit local execution only. This script never reads a private key.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { validatePlan, planHash } from "../src/hermes/paid-plan";
+import { BUILD_URL, validatePaymentPlan, planHash } from "../src/hermes/paid-plan";
 import { privatePath } from "../services/x402-signer/private-path";
 
 async function main() {
@@ -8,7 +8,8 @@ async function main() {
   const token = process.env.X402_SIGNER_TOKEN;
   if (!token || !process.env.X402_APPROVED_PLAN || !process.env.X402_APPROVED_PLAN_SHA256) throw new Error("Local approved plan, hash and signer token are required");
   if (process.env.X402_SIGNER_URL && process.env.X402_SIGNER_URL !== "http://127.0.0.1:8787") throw new Error("Signer URL must be http://127.0.0.1:8787");
-  const plan = validatePlan(JSON.parse(readFileSync(privatePath(process.env.X402_APPROVED_PLAN), "utf8")));
+  const plan = validatePaymentPlan(JSON.parse(readFileSync(privatePath(process.env.X402_APPROVED_PLAN), "utf8")));
+  if ((plan.url === BUILD_URL) !== process.argv.includes("--paid-build")) throw new Error("Use the matching quote or build command for this approved plan");
   const output = process.env.X402_RESULT_FILE ? privatePath(process.env.X402_RESULT_FILE) : undefined;
   if (!output || existsSync(output)) throw new Error("Choose a new private X402_RESULT_FILE before payment");
   if (planHash(plan) !== process.env.X402_APPROVED_PLAN_SHA256) throw new Error("Plan approval hash mismatch");

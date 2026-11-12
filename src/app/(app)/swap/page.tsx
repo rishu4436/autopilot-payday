@@ -1,6 +1,6 @@
-import { ActionForm } from "@/components/action-form";
 import { redirect } from "next/navigation";
-import { signedSwapAction } from "@/server/actions";
+import { TreasuryWallet } from "@/components/treasury-wallet";
+import { treasuryExecutionEnabled } from "@/server/live-treasury";
 import { getWorkspace } from "@/server/read";
 import { evidenceLabel, solscanTx } from "@/solana/address";
 
@@ -10,13 +10,13 @@ export default async function SwapPage() {
   const data = await getWorkspace();
   if (!data) redirect("/login");
   if (data.session.role === "contributor") redirect("/milestones");
-  const ready = data.swaps.find((row) => row.status === "ready" && row.unsignedTx);
   return (
     <div className="stack">
       <p className="kicker">Swap execution</p>
       <h1 style={{ margin: 0 }}>Review the route, then sign</h1>
-      <p>Live swaps and payouts are disabled pending instruction validation and durable reconciliation. SIMULATED quotes are fixture data, never market prices. The 1 SOL to 90 USDC demo route has no market meaning.</p>
-      {data.quotes.length === 0 && <section className="panel">No quote has been purchased.</section>}
+      <p>{data.books.org.mode === "demo" ? "SIMULATED quotes are fixture data, never market prices. The 1 SOL to 90 USDC demo route has no market meaning." : "Swap.io provides the quote and unsigned build. Review, approve and sign the exact transaction with the treasury wallet. Only independently verified finality is settlement."}</p>
+      {data.quotes.length === 0 && <section className="panel">{data.books.org.mode === "demo" ? "No quote has been purchased." : "Import a verified Swap.io build bundle to prepare a live route."}</section>}
+      {data.books.org.mode !== "demo" && data.session.role === "owner" && <TreasuryWallet kind="swap" treasury={data.books.treasury.address} submissionEnabled={treasuryExecutionEnabled() && data.books.org.mode === "live" && data.books.org.liveEnabled && process.env.APP_MODE === "live"} />}
       {data.quotes.map((quote) => (
         <article key={quote.id} className="panel">
           <div className="row">
@@ -39,13 +39,6 @@ export default async function SwapPage() {
           </article>
         );
       })}
-      {ready && data.books.org.mode === "live" && (
-        <ActionForm className="panel stack" action={signedSwapAction}>
-          <p>Paste is not accepted. Use the connected treasury wallet from the swap authorization screen after the unsigned transaction is stored. This field is for the signed payload produced by that wallet.</p>
-          <textarea name="signed" required placeholder="Signed transaction base64" />
-          <button className="btn primary" type="submit">Broadcast signed swap</button>
-        </ActionForm>
-      )}
     </div>
   );
 }

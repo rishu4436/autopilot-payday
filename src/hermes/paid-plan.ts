@@ -5,6 +5,7 @@ import { USDC_MINT, WSOL_MINT } from "../domain/tokens";
 import { PublicKey } from "@solana/web3.js";
 
 export const QUOTE_URL = "https://hermes.swap.io/v1/swap/quote";
+export const BUILD_URL = "https://hermes.swap.io/v1/swap/build-tx";
 export const HARD_CALL_ATOMIC = 10_000n; // 0.01 USDC; independent of callers
 export const HARD_DAILY_ATOMIC = 50_000n; // 0.05 USDC, UTC, includes unknown attempts
 export const HARD_LIFETIME_ATOMIC = 100_000n;
@@ -37,6 +38,14 @@ export const paidPlanSchema = z.object({
   reserveAtomic: z.string().regex(/^\d{1,19}$/),
 }).strict();
 export type PaidPlan = z.infer<typeof paidPlanSchema>;
+export const paidBuildPlanSchema = paidPlanSchema.omit({ url: true, body: true, terms: true }).extend({
+  url: z.literal(BUILD_URL),
+  body: z.object({ provider: z.string().min(1).max(80), userAddress: address, chainKey: z.literal("sol"), slippageBps: z.number().int().min(1).max(50), quoteResponse: z.record(z.string(), z.unknown()) }).strict(),
+  terms: paidPlanSchema.shape.terms.extend({ resource: z.literal(BUILD_URL) }).strict(),
+  quote: z.object({ paymentSignature: z.string().min(64).max(90), responseSha256: z.string().regex(/^[a-f0-9]{64}$/), createdAt: z.string().datetime(), inputAtomic: atomic, minOutputAtomic: atomic, outputAtomic: atomic, slippageBps: z.number().int().min(1).max(50) }).strict(),
+}).strict();
+export type PaidBuildPlan = z.infer<typeof paidBuildPlanSchema>;
+export type PaymentPlan = PaidPlan | PaidBuildPlan;
 
 export function validatePlan(raw: unknown, now = Date.now()): PaidPlan {
   const plan = paidPlanSchema.parse(raw);
@@ -50,12 +59,21 @@ export function validatePlan(raw: unknown, now = Date.now()): PaidPlan {
   if (plan.payer === plan.terms.feePayer || plan.payer === plan.terms.payTo) throw new Error("Payer must be independent of facilitator and payee");
   return plan;
 }
-export function planHash(plan: PaidPlan): string {
+export function validatePaymentPlan(raw: unknown, now = Date.now()): PaymentPlan {
+  if (!raw || typeof raw !== "object" || !("url" in raw) || raw.url !== BUILD_URL) return validatePlan(raw, now);
+  const p = paidBuildPlanSchema.parse(raw);
+  const { quote, ...base } = p;
+  if (now - Date.parse(quote.createdAt) > 120_000) throw new Error("Quote is stale for a new paid build; prepare a fresh quote");
+  validatePlan({ ...base, url: QUOTE_URL, body: { input: { token: WSOL_MINT, amount: quote.inputAtomic, chainKey: "sol" }, output: { token: USDC_MINT, chainKey: "sol" }, userAddress: p.body.userAddress, slippageBps: quote.slippageBps }, terms: { ...p.terms, resource: QUOTE_URL } }, now);
+  if (JSON.stringify(p.body).length > 250_000 || Date.parse(quote.createdAt) > now || p.body.slippageBps !== quote.slippageBps || BigInt(quote.minOutputAtomic) > BigInt(quote.outputAtomic) || BigInt(quote.minOutputAtomic) < BigInt(quote.outputAtomic) * BigInt(10_000 - quote.slippageBps) / 10_000n) throw new Error("Invalid build quote metadata");
+  return p;
+}
+export function planHash(plan: PaymentPlan): string {
   return createHash("sha256").update(canonicalJson(plan)).digest("hex");
 }
 
-export function validateTerms(plan: PaidPlan, terms: Record<string, unknown>, context: { requestUrl: string; responseUrl: string; declaredResource?: unknown }): void {
-  validatePlan(plan);
+export function validateTerms(plan: PaymentPlan, terms: Record<string, unknown>, context: { requestUrl: string; responseUrl: string; declaredResource?: unknown }): void {
+  validatePaymentPlan(plan);
   const extra = terms.extra as { feePayer?: unknown } | undefined;
   const resource = terms.resource ?? (context.declaredResource as { url?: unknown } | undefined)?.url;
   if (terms.maxTimeoutSeconds !== undefined && (typeof terms.maxTimeoutSeconds !== "number" || !Number.isInteger(terms.maxTimeoutSeconds) || terms.maxTimeoutSeconds <= 0 || terms.maxTimeoutSeconds > 60)) throw new Error("Unsafe payment timeout");

@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "./network";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -24,7 +25,7 @@ function fixture(milestoneId = "ms_brand", amount = 40_000_000n) {
   const proposal: TreasuryProposal = { orgId: "org_northstar", batchId: "offline-test-batch", owner: owner.publicKey.toBase58(), kind: "payout", policyVersion: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), blockhash, lastValidBlockHeight: 100, maxInputAtomic: String(amount), minOutputAtomic: "0", maxSolDebitLamports: "10000", maxFeeLamports: "10000", maxRentLamports: "0", solReserveLamports: "1000000", slippageBps: 0, allocations: [{ id: `allocation-${milestoneId}`, milestoneId, recipient: recipient.toBase58(), amountAtomic: String(amount) }] };
   const base64 = buildUsdcPayouts({ payer: proposal.owner, recipients: [{ id: milestoneId, address: recipient.toBase58(), amountAtomic: amount }], blockhash, rentLamports: 0n })[0]!.base64;
   const tx = VersionedTransaction.deserialize(Buffer.from(base64, "base64"));
-  const context: TreasuryContext = { genesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", observedAt: Date.now(), accounts: new Map(), allowlistedRecipients: new Set([recipient.toBase58()]), networkFeeLamports: 5000n, rentPerAccountLamports: 2039280n, blockHeight: 50, reviewedRoutes: [] };
+  const context: TreasuryContext = { genesisHash: SOLANA_MAINNET_GENESIS_HASH, observedAt: Date.now(), accounts: new Map(), allowlistedRecipients: new Set([recipient.toBase58()]), networkFeeLamports: 5000n, rentPerAccountLamports: 2039280n, blockHeight: 50, reviewedRoutes: [] };
   for (const key of tx.message.staticAccountKeys) context.accounts.set(key.toBase58(), { address: key.toBase58(), exists: true, lamports: 10_000_000n });
   for (const ix of TransactionMessage.decompile(tx.message).instructions) context.accounts.get(ix.programId.toBase58())!.executable = true;
   context.accounts.set(source.toBase58(), { address: source.toBase58(), exists: true, lamports: 2039280n, mint: USDC_MINT, authority: proposal.owner, amount: 100_000_000n });
@@ -164,7 +165,7 @@ function chain(f: ReturnType<typeof fixture>, signature: string, err: unknown = 
   const keys = f.tx.message.staticAccountKeys, balances = (after: boolean) => keys.map((k) => Number((after ? f.simulation.after : f.context.accounts).get(k.toBase58())?.lamports ?? 0n));
   const tokens = (after: boolean) => [...(after ? f.simulation.after : f.context.accounts)].filter(([, a]) => a.mint).map(([address, a]) => ({ accountIndex: keys.findIndex((k) => k.toBase58() === address), owner: a.authority, mint: a.mint, uiTokenAmount: { amount: String(a.amount), decimals: 6 } }));
   const record = { slot: 99, transaction: { message: f.tx.message, signatures: [signature] }, meta: { err, fee: 5000, innerInstructions: [], preBalances: balances(false), postBalances: balances(true), preTokenBalances: tokens(false), postTokenBalances: tokens(true) } };
-  return { getGenesisHash: vi.fn(async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"), getSignatureStatuses: vi.fn(async () => ({ value: [{ confirmationStatus: "finalized", err }] })), getTransaction: vi.fn(async () => record) } as unknown as Connection;
+  return { getGenesisHash: vi.fn(async () => SOLANA_MAINNET_GENESIS_HASH), getSignatureStatuses: vi.fn(async () => ({ value: [{ confirmationStatus: "finalized", err }] })), getTransaction: vi.fn(async () => record) } as unknown as Connection;
 }
 describe("durable treasury ledger with a real SQL database", () => {
   it("requires owner authorization, unchanged manifest and current allowlists", async () => {

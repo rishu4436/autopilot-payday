@@ -1,3 +1,4 @@
+import { assertMainnetRpc, SOLANA_MAINNET_GENESIS_HASH } from "../solana/network";
 // Durable execution ledger. Submission is handled by the separately gated live service.
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -68,7 +69,7 @@ export class TreasuryExecutionStore {
     const row = await this.get(id), m = JSON.parse(row.manifest) as TreasuryManifest;
     if (["CONFIRMED", "FAILED"].includes(row.state)) return row.state;
     if (!row.signature || !row.signed_base64) throw new Error("No signed transaction to reconcile");
-    if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+    await assertMainnetRpc(rpc);
     const status = (await rpc.getSignatureStatuses([row.signature], { searchTransactionHistory: true })).value[0];
     // Absence, expiry and transport failure are never proof that an allocation is unpaid.
     if (!status || status.confirmationStatus !== "finalized") return "UNKNOWN";
@@ -95,7 +96,7 @@ export async function verifyTreasuryEffects(m: TreasuryManifest, tx: NonNullable
   const meta = tx.meta!, keys = tx.transaction.message.staticAccountKeys;
   const ownerIndex = keys.findIndex((key) => key.toBase58() === m.proposal.owner);
   if (ownerIndex < 0 || meta.fee > Number(m.proposal.maxFeeLamports) || BigInt(meta.preBalances[ownerIndex]! - meta.postBalances[ownerIndex]!) > BigInt(m.proposal.maxSolDebitLamports) || BigInt(meta.postBalances[ownerIndex]!) < BigInt(m.proposal.solReserveLamports)) throw new Error("Unexpected SOL effects");
-  const before: TreasuryContext = { genesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", observedAt: Date.now(), accounts: new Map(), allowlistedRecipients: new Set(m.proposal.allocations.map((a) => a.recipient)), networkFeeLamports: BigInt(meta.fee), rentPerAccountLamports: BigInt(m.rentPerAccountLamports), blockHeight: 0, reviewedRoutes: [] };
+  const before: TreasuryContext = { genesisHash: SOLANA_MAINNET_GENESIS_HASH, observedAt: Date.now(), accounts: new Map(), allowlistedRecipients: new Set(m.proposal.allocations.map((a) => a.recipient)), networkFeeLamports: BigInt(meta.fee), rentPerAccountLamports: BigInt(m.rentPerAccountLamports), blockHeight: 0, reviewedRoutes: [] };
   const after: TreasuryContext["accounts"] = new Map();
   keys.forEach((key, i) => {
     if (!Number.isSafeInteger(meta.preBalances[i]) || !Number.isSafeInteger(meta.postBalances[i])) throw new Error("Unsafe RPC balance precision");

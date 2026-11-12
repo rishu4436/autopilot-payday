@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "../network";
 // TEST ONLY: synthetic Solana state, unfunded deterministic wallet, no network.
 import { Keypair, PublicKey, SystemProgram, ComputeBudgetProgram, TransactionMessage, VersionedTransaction, type AccountInfo, type TransactionInstruction } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
@@ -50,7 +51,7 @@ export class TreasuryTestBank {
   }
   inspect = async (_rpc: unknown, base64: string, p: TreasuryProposal, recipients: Set<string>, reviewedRoutes: readonly ReviewedRoute[] = []) => {
     const tx = VersionedTransaction.deserialize(Buffer.from(base64, "base64"));
-    const before: TreasuryContext = { genesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", observedAt: Date.now(), accounts: this.snapshots(tx.message.staticAccountKeys, this.accounts), allowlistedRecipients: recipients, networkFeeLamports: 5000n, rentPerAccountLamports: RENT, blockHeight: 50, reviewedRoutes };
+    const before: TreasuryContext = { genesisHash: SOLANA_MAINNET_GENESIS_HASH, observedAt: Date.now(), accounts: this.snapshots(tx.message.staticAccountKeys, this.accounts), allowlistedRecipients: recipients, networkFeeLamports: 5000n, rentPerAccountLamports: RENT, blockHeight: 50, reviewedRoutes };
     const manifest = inspectTreasuryTransaction(base64, p, before), run = this.run(tx);
     const simulation = { err: null, logs: run.logs, after: this.snapshots(tx.message.staticAccountKeys, run.after), innerInstructions: run.inner.flatMap((group) => group.instructions) };
     validateTreasurySimulation(manifest, before, simulation);
@@ -119,7 +120,7 @@ export class TreasuryTestBank {
     return { slot, blockTime: Math.floor(Date.now() / 1000), version: tx.message.version, transaction: { signatures: tx.signatures.map((s) => bs58.encode(s)), message: tx.message }, meta: { err, fee: 5000, logMessages: run.logs, preBalances: keys.map((key) => Number(this.model(key.toBase58(), run.before)?.lamports ?? 0n)), postBalances: keys.map((key) => Number(this.model(key.toBase58(), run.after)?.lamports ?? 0n)), preTokenBalances: tokenBalances(run.before), postTokenBalances: tokenBalances(run.after), innerInstructions: run.inner.map((group) => ({ index: group.index, instructions: group.instructions.map((ix) => ({ programIdIndex: keys.findIndex((key) => key.equals(ix.programId)), accounts: ix.keys.map((meta) => keys.findIndex((key) => key.equals(meta.pubkey))), data: bs58.encode(ix.data) })) })), loadedAddresses: { readonly: [], writable: [] } } };
   }
   rpc = {
-    getGenesisHash: async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    getGenesisHash: async () => SOLANA_MAINNET_GENESIS_HASH,
     getLatestBlockhash: async () => this.latest(), getBlockHeight: async () => 50,
     getBlockTime: async () => Math.floor(Date.now() / 1000),
     isBlockhashValid: async () => ({ context: { slot: this.slot }, value: true }),

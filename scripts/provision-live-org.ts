@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "../src/solana/network";
 // Administrative local provisioning: public addresses and database writes only.
 // It never requests a keypair, signs a transaction or transfers funds.
 import "./load-live-env";
@@ -29,7 +30,7 @@ async function main() {
     console.log(JSON.stringify({ orgId: existing.id, slug, enabled: true, noFinancialTransactionExecuted: true })); return;
   }
   if ((await db.execute(sql`select id from users where wallet_address=${owner}`)).rows.length) throw new Error("Owner wallet already belongs to an identity. Provisioning never reassigns existing users");
-  if (await connection().getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+  if (await connection().getGenesisHash() !== SOLANA_MAINNET_GENESIS_HASH) throw new Error("Expected mainnet RPC");
   const [treasury, api] = await Promise.all([readChainBalances(owner), readChainBalances(payer)]);
   const orgId = crypto.randomUUID(), userId = crypto.randomUUID(), policy = { ...defaultPolicy(), minTreasurySolAtomic: "20000000", minTreasuryUsdcAtomic: "0", minX402UsdcAtomic: "100000", maxQuoteAgeMs: 120_000 };
   await db.transaction(async (tx) => {

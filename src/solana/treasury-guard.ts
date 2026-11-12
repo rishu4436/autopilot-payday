@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "./network";
 import { createHash } from "node:crypto";
 import { ComputeBudgetProgram, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction, type TransactionInstruction } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, decodeTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
@@ -39,7 +40,7 @@ export function treasuryProposalHash(proposal: TreasuryProposal): string {
   return createHash("sha256").update(canonicalJson(proposal)).digest("hex");
 }
 export function inspectTreasuryTransaction(base64: string, proposal: TreasuryProposal, context: TreasuryContext, now = Date.now()): TreasuryManifest {
-  if (context.genesisHash !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" || context.observedAt > now || now - context.observedAt > 15_000) throw new Error("Fresh mainnet snapshots required");
+  if (context.genesisHash !== SOLANA_MAINNET_GENESIS_HASH || context.observedAt > now || now - context.observedAt > 15_000) throw new Error("Fresh mainnet snapshots required");
   if (!["swap", "payout"].includes(proposal.kind) || !Number.isSafeInteger(context.blockHeight) || !Number.isSafeInteger(proposal.lastValidBlockHeight)) throw new Error("Invalid proposal kind or block height");
   if (proposal.kind === "payout" && !proposal.batchId) throw new Error("Payroll approval requires an immutable batch ID");
   if (!proposal.orgId || !Number.isSafeInteger(proposal.policyVersion) || proposal.policyVersion < 1 || !Number.isFinite(Date.parse(proposal.expiresAt)) || Date.parse(proposal.expiresAt) <= now || context.blockHeight > proposal.lastValidBlockHeight) throw new Error("Expired proposal or blockhash");

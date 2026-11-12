@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../solana/network";
 import { createHash } from "node:crypto";
 import { AddressLookupTableAccount, AddressLookupTableProgram, Connection, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { z } from "zod";
@@ -18,7 +19,7 @@ export async function verifyPaidBuildEvidence(raw: unknown, rpc: Connection): Pr
   verifyApiCapture(record, true);
   const message = Buffer.from(record.messageBase64, "base64"), receipt = decodePaymentResponse(record.receiptHeader);
   if (!receipt.ok || receipt.transaction !== record.evidence.signature || createHash("sha256").update(message).digest("hex") !== record.messageHash) throw new Error("Build payment evidence mismatch");
-  if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+  await assertMainnetRpc(rpc);
   const evidence = await verifySettlement(rpc, receipt.transaction, plan, message);
   if (evidence.slot !== record.evidence.slot || evidence.solscan !== record.evidence.solscan || (record.build.provider && record.build.provider !== record.plan.body.provider)) throw new Error("Build evidence differs from independent settlement");
   return record;

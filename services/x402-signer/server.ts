@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../../src/solana/network";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -24,7 +25,7 @@ async function main() {
   const options = { commitment: "confirmed" as const, disableRetryOnRateLimit: true, fetch: (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) }) };
   const rpc = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", options);
   const verificationRpc = new Connection(process.env.SOLANA_VERIFICATION_RPC_URL || rpc.rpcEndpoint, options);
-  for (const connection of [rpc, verificationRpc]) if (await connection.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+  for (const connection of [rpc, verificationRpc]) await assertMainnetRpc(connection);
   const directory = privatePath(process.env.X402_JOURNAL_DIR);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const lockPath = join(directory, "signer.lock"), lockFd = openSync(lockPath, "wx", 0o600);

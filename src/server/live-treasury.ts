@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../solana/network";
 import { sql } from "drizzle-orm";
 import { TransactionMessage, VersionedTransaction, type Connection } from "@solana/web3.js";
 import { type AppDb } from "../db/client";
@@ -175,7 +176,7 @@ export class LiveTreasuryService {
     // Commit UNKNOWN and the signed bytes before entering the network call.
     // A timeout, process crash, or mismatched RPC signature never permits another dispatch.
     try {
-      if (await this.deps.rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+      await assertMainnetRpc(this.deps.rpc);
       const returned = await this.deps.rpc.sendRawTransaction(Buffer.from(claimed.signed_base64!, "base64"), { skipPreflight: false, maxRetries: 0, preflightCommitment: "confirmed" });
       if (returned !== claimed.signature) throw new Error("RPC signature mismatch; preserve the original deterministic signature");
     } catch { /* UNKNOWN is durable; only chain reconciliation can resolve it. */ }
@@ -238,7 +239,7 @@ export class LiveTreasuryService {
     const row = await this.attempt(session, id), m = JSON.parse(row.manifest) as TreasuryManifest;
     if (row.state !== "CONFIRMED" || !row.signature) throw new Error("Only a finalized verified transaction can be exported");
     const rpc = this.deps.verificationRpc;
-    if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+    await assertMainnetRpc(rpc);
     const chain = await rpc.getTransaction(row.signature, { commitment: "finalized", maxSupportedTransactionVersion: 0 });
     if (!chain?.meta || chain.meta.err || chain.transaction.signatures[0] !== row.signature || !Buffer.from(chain.transaction.message.serialize()).equals(Buffer.from(m.messageBase64, "base64"))) throw new Error("Finalized chain receipt no longer matches the approved transaction");
     const balances = await verifyTreasuryEffects(m, chain);

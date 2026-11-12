@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "./network";
 import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -161,7 +162,7 @@ describe("independent chain receipt validation", () => {
   });
   it("reverifies public paid artifacts and refuses self-asserted/fabricated receipts", async () => {
     const e = evidence(), message = Buffer.from(e.tx.message.serialize());
-    const rpc = { ...e.rpc, getGenesisHash: async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" } as unknown as Connection;
+    const rpc = { ...e.rpc, getGenesisHash: async () => SOLANA_MAINNET_GENESIS_HASH } as unknown as Connection;
     const record = { schemaVersion: 1, evidenceClass: "verified_chain", at: new Date().toISOString(), plan: e.p, messageBase64: message.toString("base64"), messageHash: createHash("sha256").update(message).digest("hex"), receiptHeader: Buffer.from(JSON.stringify({ success: true, transaction: e.signature })).toString("base64"), responseSha256: "0".repeat(64), evidence: { signature: e.signature, slot: 123, solscan: `https://solscan.io/tx/${e.signature}` }, quotes: [{ provider: "synthetic-test-only", inputAtomic: "1000000", outputAtomic: "10000", minOutAtomic: null }] };
     await expect(verifyPaidEvidence(record, rpc)).resolves.toMatchObject({ evidenceClass: "verified_chain" });
     e.status.value[0]!.confirmationStatus = "processed";

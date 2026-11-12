@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../src/solana/network";
 // Read-only chain reconciliation. Never imports a Keypair, signs or broadcasts.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,7 +24,7 @@ async function main() {
   const signature = signatureIndex >= 0 ? process.argv[signatureIndex + 1] : row.signature;
   if (!signature || signature.endsWith(".ts")) throw new Error("Provide --signature with the independently observed Solana transaction signature");
   const rpc = new Connection(process.env.SOLANA_VERIFICATION_RPC_URL || process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) }) });
-  if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+  await assertMainnetRpc(rpc);
   const evidence = await verifySettlement(rpc, signature, plan, Buffer.from(row.messageBase64, "base64"));
   if (row.state !== "verified") journal.append({ ...row, state: "verified", signature: evidence.signature });
   let quoteResponseRecovered = false;

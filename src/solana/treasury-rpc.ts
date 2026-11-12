@@ -1,3 +1,4 @@
+import { assertMainnetRpc, SOLANA_MAINNET_GENESIS_HASH } from "./network";
 // Read-only adapter. Never loads a keypair, signs, builds a paid request or broadcasts.
 import { Connection, PublicKey, SystemProgram, VersionedTransaction, type AccountInfo } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, unpackAccount } from "@solana/spl-token";
@@ -16,7 +17,7 @@ function snapshot(address: PublicKey, info: AccountInfo<Buffer> | null): Account
   return state;
 }
 export async function inspectTreasuryFromRpc(rpc: Connection, base64: string, proposal: TreasuryProposal, allowlistedRecipients: Set<string>, reviewedRoutes: readonly ReviewedRoute[] = []) {
-  if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected mainnet RPC");
+  await assertMainnetRpc(rpc);
   const tx = VersionedTransaction.deserialize(Buffer.from(base64, "base64"));
   if (tx.message.version === 0 && tx.message.addressTableLookups.length) throw new Error("Unresolved lookup tables are forbidden");
   const keys = tx.message.staticAccountKeys;
@@ -28,7 +29,7 @@ export async function inspectTreasuryFromRpc(rpc: Connection, base64: string, pr
   if (!valid.value || fee.value === null || !Number.isSafeInteger(fee.value) || !Number.isSafeInteger(rent) || accounts.value.length !== keys.length) throw new Error("Invalid blockhash, fees, rent or account snapshot");
   const ownerIndex = keys.findIndex((key) => key.toBase58() === proposal.owner), owner = accounts.value[ownerIndex];
   if (!owner || !owner.owner.equals(SystemProgram.programId) || owner.executable) throw new Error("Treasury must be a system-owned wallet");
-  const before: TreasuryContext = { genesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", observedAt: Date.now(), accounts: new Map(keys.map((key, i) => [key.toBase58(), snapshot(key, accounts.value[i]!)])), allowlistedRecipients: new Set(allowlistedRecipients), networkFeeLamports: BigInt(fee.value), rentPerAccountLamports: BigInt(rent), blockHeight, reviewedRoutes: structuredClone(reviewedRoutes) };
+  const before: TreasuryContext = { genesisHash: SOLANA_MAINNET_GENESIS_HASH, observedAt: Date.now(), accounts: new Map(keys.map((key, i) => [key.toBase58(), snapshot(key, accounts.value[i]!)])), allowlistedRecipients: new Set(allowlistedRecipients), networkFeeLamports: BigInt(fee.value), rentPerAccountLamports: BigInt(rent), blockHeight, reviewedRoutes: structuredClone(reviewedRoutes) };
   const manifest = inspectTreasuryTransaction(base64, proposal, before);
   const simulated = await rpc.simulateTransaction(tx, { commitment: "confirmed", sigVerify: false, replaceRecentBlockhash: false, minContextSlot: accounts.context.slot, innerInstructions: true, accounts: { encoding: "base64", addresses: keys.map((key) => key.toBase58()) } });
   const result = simulated.value;

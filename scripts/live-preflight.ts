@@ -1,3 +1,4 @@
+import { SOLANA_MAINNET_GENESIS_HASH } from "../src/solana/network";
 // Read-only deployment check. Never reads a keypair, signs, pays or broadcasts.
 import "./load-live-env";
 import { Connection } from "@solana/web3.js";
@@ -24,7 +25,7 @@ async function main() {
   for (const [id, endpoint] of [["primary_rpc", process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"], ["verification_rpc", process.env.SOLANA_VERIFICATION_RPC_URL || ""]] as const) {
     try {
       const rpc = new Connection(endpoint, { disableRetryOnRateLimit: true, fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) }) });
-      checks.push({ id, label: id, ok: await rpc.getGenesisHash() === "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", detail: "Read-only mainnet genesis check." });
+      checks.push({ id, label: id, ok: await rpc.getGenesisHash() === SOLANA_MAINNET_GENESIS_HASH, detail: "Read-only mainnet genesis check." });
     } catch { checks.push({ id, label: id, ok: false, detail: "RPC unavailable or invalid; endpoint credentials are not logged." }); }
   }
   try {

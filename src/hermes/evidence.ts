@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../solana/network";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Connection } from "@solana/web3.js";
@@ -22,7 +23,7 @@ export async function verifyPaidEvidence(raw: unknown, rpc: Connection): Promise
   verifyApiCapture(record);
   const message = Buffer.from(record.messageBase64, "base64"), receipt = decodePaymentResponse(record.receiptHeader);
   if (createHash("sha256").update(message).digest("hex") !== record.messageHash || !receipt.ok || receipt.transaction !== record.evidence.signature) throw new Error("Evidence message/receipt mismatch");
-  if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Evidence needs mainnet RPC");
+  await assertMainnetRpc(rpc);
   const evidence = await verifySettlement(rpc, receipt.transaction, plan, message);
   if (evidence.slot !== record.evidence.slot || evidence.solscan !== record.evidence.solscan) throw new Error("Evidence differs from RPC settlement");
   return { ...record, evidence };

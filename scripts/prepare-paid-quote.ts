@@ -1,3 +1,4 @@
+import { assertMainnetRpc } from "../src/solana/network";
 // Read-only: public address only; no keypair, signature, payment or broadcast.
 import "./load-live-env";
 import { writeFileSync } from "node:fs";
@@ -15,7 +16,7 @@ async function main() {
   const payer = new PublicKey(process.env.X402_PAYER_PUBLIC_KEY || "");
   const treasury = new PublicKey(process.env.TREASURY_PUBLIC_KEY || payer.toBase58());
   const rpc = new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) }) });
-  if (await rpc.getGenesisHash() !== "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") throw new Error("Expected Solana mainnet");
+  await assertMainnetRpc(rpc);
   const account = await getAccount(rpc, getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), payer));
   const discovery = await discoverLive(true);
   const body = buildQuoteBody({ inputMint: WSOL_MINT, inputAmount: 1_000_000n, outputMint: USDC_MINT, userAddress: treasury.toBase58(), slippageBps: 50 });

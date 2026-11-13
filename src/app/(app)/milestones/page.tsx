@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { milestoneAction, milestoneReviewAction } from "@/server/actions";
 import { MilestoneForm } from "@/components/milestone-form";
 import { getWorkspace } from "@/server/read";
+import { canEditMilestone, type WorkStatus, type PaymentStatus } from "@/domain/milestones";
+import { formatAtomic } from "@/domain/money";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +26,14 @@ export default async function MilestonesPage() {
           <tbody>
             {tasks.map((task) => (
               <tr key={task.id}>
-                <td>{task.title}<div className="kicker">{task.description}</div>{task.evidence && <div>Evidence: {task.evidence}</div>}</td>
+                <td>{task.title}<div className="kicker">{task.description}</div>{task.evidence && <div>Evidence: {task.evidence}</div>}<small>Project: {task.projectId}</small></td>
                 <td>{data.personName(task.contributorId)}</td>
                 <td className="num">{data.usdc(task.amountAtomic)}</td>
                 <td>{task.workStatus}</td>
                 <td>{task.paymentStatus}</td>
                 <td>{task.dueOn}</td>
                 <td className="stack">
+                  {data.session.role !== "auditor" && canEditMilestone(task.workStatus as WorkStatus, task.paymentStatus as PaymentStatus) && <details><summary>Edit milestone</summary><MilestoneForm people={data.books.people.map((p) => ({ id: p.id, name: p.displayName }))} action={milestoneAction} initial={{ id: task.id, title: task.title, description: task.description, contributorId: task.contributorId, amount: formatAtomic(BigInt(task.amountAtomic), 6), dueOn: task.dueOn, evidence: task.evidence }} /></details>}
                   {(task.workStatus === "DRAFT" || task.workStatus === "IN_PROGRESS") && (
                     <ActionForm action={milestoneReviewAction}><input type="hidden" name="id" value={task.id} /><input type="hidden" name="intent" value="submit" /><button className="btn" type="submit">Submit</button></ActionForm>
                   )}

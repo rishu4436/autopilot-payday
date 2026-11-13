@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ActionState } from "@/server/text";
 
-export function MilestoneForm({ people, action }: { people: { id: string; name: string }[]; action: (prev: ActionState, formData: FormData) => Promise<ActionState> }) {
+export function MilestoneForm({ people, action, initial }: { people: { id: string; name: string }[]; action: (prev: ActionState, formData: FormData) => Promise<ActionState>; initial?: { id: string; title: string; description: string; contributorId: string; amount: string; dueOn: string; evidence: string } }) {
   const [message, setMessage] = useState<string | null>(null);
   return (
     <form className="panel stack" data-reload-after-submit="true" action={async (formData) => {
@@ -11,19 +11,20 @@ export function MilestoneForm({ people, action }: { people: { id: string; name: 
       setMessage(result?.message ?? null);
       if (result?.ok) window.location.reload();
     }}>
-      <strong>New milestone</strong>
+      <strong>{initial ? "Edit milestone" : "New milestone"}</strong>
+      {initial && <input type="hidden" name="id" value={initial.id} />}
       {message && <div className="flash">{message}</div>}
       <div className="two">
-        <label className="field">Title<input name="title" required /></label>
+        <label className="field">Title<input name="title" defaultValue={initial?.title} required /></label>
         <label className="field">Contributor
-          <select name="contributorId">{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
+          <select name="contributorId" defaultValue={initial?.contributorId}>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
         </label>
-        <label className="field">USDC amount<input name="amount" required placeholder="40" /></label>
-        <label className="field">Due<input name="dueOn" type="date" required /></label>
+        <label className="field">USDC amount<input name="amount" defaultValue={initial?.amount} required placeholder="40" /></label>
+        <label className="field">Due<input name="dueOn" type="date" defaultValue={initial?.dueOn} required /></label>
       </div>
-      <label className="field">Description<textarea name="description" required /></label>
-      <label className="field">Evidence<textarea name="evidence" /></label>
-      <button className="btn primary" type="submit">Create draft</button>
+      <label className="field">Description<textarea aria-label="Description" name="description" defaultValue={initial?.description} required /></label>
+      <label className="field">Evidence<textarea aria-label="Evidence" name="evidence" defaultValue={initial?.evidence} /></label>
+      <button className="btn primary" type="submit">{initial ? "Save changes" : "Create draft"}</button>
     </form>
   );
 }

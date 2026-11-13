@@ -32,7 +32,7 @@ export function Shell({ flash, role, name, authMode, orgMode, orgName, paused, p
   const [narrow, setNarrow] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const wallet = useWallet();
-  useEffect(() => { setTheme(document.documentElement.dataset.theme ?? "dark"); if (flash) document.cookie = "ap_flash=; Max-Age=0; path=/"; }, [flash]);
+  useEffect(() => { setTheme(document.documentElement.dataset.theme ?? "dark"); }, []);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1000px)");
     const update = () => setNarrow(query.matches);

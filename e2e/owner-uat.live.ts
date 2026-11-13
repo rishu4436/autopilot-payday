@@ -5,6 +5,7 @@ import { Keypair } from "@solana/web3.js";
 const owner = Keypair.fromSeed(new Uint8Array(32).fill(232));
 
 test("owner UAT signs in with a message and remains read-only with no API payer", async ({ page, request }) => {
+  page.setDefaultTimeout(15_000);
   const before = await (await request.get("http://127.0.0.1:3140/stats")).json();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -53,7 +54,7 @@ test("owner UAT signs in with a message and remains read-only with no API payer"
   await expect(payer).toContainText("NOT CONFIGURED");
   await expect(payer).toContainText("Spendable unavailable");
   await expect(payer).toContainText("No RPC observation");
-  await expect(payer.locator(".wallet-balance-item .num")).toHaveText(["—", "—"]);
+  await expect(payer.locator(".wallet-balance-item .num")).toHaveText(["\u2014", "\u2014"]);
   await expect(payer.getByRole("link")).toHaveCount(0);
   await page.screenshot({ path: "audit/testing-phase/uat-treasury-desktop.png", fullPage: true, animations: "disabled" });
   const refreshed = page.waitForEvent("load");
@@ -84,7 +85,49 @@ test("owner UAT signs in with a message and remains read-only with no API payer"
   }
   await expect(page.getByTestId("live-swap-wallet")).toContainText("READ-ONLY");
   await expect(page.getByRole("button", { name: "Preview live swap", exact: true })).toBeDisabled();
-  for (const route of ["/", "/treasury", "/fuel", "/settings"]) {
+  // Exercise the reported editing gaps and visible refusal with no money movement.
+  async function saveAndReload(button: ReturnType<typeof page.getByRole>) {
+    const loaded = page.waitForEvent("load"); await button.click(); await loaded;
+    await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  }
+  await page.goto("/contributors");
+  const personForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save", exact: true }) });
+  await personForm.getByLabel("Name", { exact: true }).fill("Editing recipient");
+  await personForm.getByLabel("Role", { exact: true }).fill("QA");
+  await personForm.getByLabel("Wallet", { exact: true }).fill(Keypair.fromSeed(new Uint8Array(32).fill(233)).publicKey.toBase58());
+  await saveAndReload(personForm.getByRole("button", { name: "Save", exact: true }));
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await personForm.getByLabel("Notes", { exact: true }).fill("Changed from UI");
+  await personForm.getByLabel("Active", { exact: true }).uncheck();
+  await saveAndReload(personForm.getByRole("button", { name: "Save", exact: true }));
+  await expect(page.getByRole("row").filter({ hasText: "Editing recipient" })).toContainText("Inactive");
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await personForm.getByLabel("Active", { exact: true }).check();
+  await saveAndReload(personForm.getByRole("button", { name: "Save", exact: true }));
+  await page.getByRole("button", { name: "Allowlist", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove allowlist", exact: true })).toBeVisible();
+  await page.goto("/milestones");
+  const create = page.locator("form").filter({ has: page.getByRole("button", { name: "Create draft", exact: true }) });
+  await create.getByLabel("Title", { exact: true }).fill("Editable workflow");
+  await create.getByLabel("USDC amount", { exact: true }).fill("0.01");
+  await create.getByLabel("Due", { exact: true }).fill("2026-11-13");
+  await create.getByLabel("Description", { exact: true }).fill("Initial work");
+  await saveAndReload(create.getByRole("button", { name: "Create draft", exact: true }));
+  const work = page.getByRole("row").filter({ hasText: "Editable workflow" });
+  await work.locator("summary").click();
+  await work.getByLabel("USDC amount", { exact: true }).fill("0.02");
+  await work.getByLabel("Description", { exact: true }).fill("Revised work");
+  await saveAndReload(work.getByRole("button", { name: "Save changes", exact: true }));
+  await expect(work).toContainText("0.02 USDC"); await expect(work).toContainText("Revised work");
+  for (const name of ["Submit", "Review", "Approve"]) await saveAndReload(work.getByRole("button", { name, exact: true }));
+  await page.goto("/payroll"); await page.locator('input[name="milestoneId"]').check();
+  await saveAndReload(page.getByRole("button", { name: "Draft batch", exact: true }));
+  await page.getByRole("button", { name: "Authorize", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Insufficient treasury USDC" })).toBeVisible();
+  await page.getByLabel("Rejection reason", { exact: true }).fill("UI regression completed");
+  await saveAndReload(page.getByRole("button", { name: "Reject", exact: true }));
+  await expect(page.getByText("Batch rejected. The milestones can be selected again.", { exact: true })).toBeVisible();
+  for (const route of ["/", "/treasury", "/fuel", "/settings", "/milestones"]) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(route);
     await expect(page.getByTestId("uat-notice")).toBeVisible();

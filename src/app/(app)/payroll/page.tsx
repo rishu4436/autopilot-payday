@@ -41,7 +41,7 @@ export default async function PayrollPage() {
             {batch.status === "DRAFT" && data.session.role !== "auditor" && (
               <div className="row">
                 <ActionForm action={batchDecisionAction}><input type="hidden" name="id" value={batch.id} /><input type="hidden" name="decision" value="approved" /><button className="btn mint" type="submit">Authorize</button></ActionForm>
-                <ActionForm action={batchDecisionAction}><input type="hidden" name="id" value={batch.id} /><input type="hidden" name="decision" value="rejected" /><button className="btn" type="submit">Reject</button></ActionForm>
+                <ActionForm action={batchDecisionAction}><input type="hidden" name="id" value={batch.id} /><input type="hidden" name="decision" value="rejected" /><label className="field">Rejection reason<input name="reason" required maxLength={500} /></label><button className="btn" type="submit">Reject</button></ActionForm>
               </div>
             )}
             {batch.status === "APPROVED" && data.books.org.mode === "demo" && data.session.role !== "auditor" && (

@@ -26,7 +26,7 @@ export default function LoginPage() {
       <div className="auth-form-content">
         <div className="row"><span className={demo ? "badge amber" : "badge cyan"}>{demo ? "DEMO WORKSPACE" : process.env.APP_MODE === "live" ? "MAINNET WORKSPACE" : "LIVE READ-ONLY"}</span></div>
         <h2>Welcome to payday.</h2>
-        <p>Connect your treasury wallet to open your workspace.</p>
+        <p>Connect your treasury wallet to open your workspace. The badge above describes this deployment; your workspace mode appears after sign-in.</p>
         <div className="auth-wallet-card">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}><h3 style={{ margin: 0 }}>Wallet sign-in</h3><Wallet size={19} className="muted" aria-hidden="true" /></div>
           <p>Connect Phantom or Solflare, then sign a one-time message to verify ownership.</p>

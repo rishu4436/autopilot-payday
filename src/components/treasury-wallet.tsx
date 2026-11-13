@@ -92,7 +92,9 @@ export function TreasuryWallet({ kind, batchId, treasury, submissionEnabled, can
     if (!file) return;
     try {
       if (file.size > 500_000) throw new Error("Build bundle must be smaller than 500 KB");
-      const text = await file.text(), parsed = JSON.parse(text);
+      const text = await file.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { throw new Error("This file is not valid JSON. Select the exported Swap.io build bundle."); }
       // Reject wallet/keypair files locally, before any network upload.
       if (!parsed || Array.isArray(parsed) || parsed.record?.plan?.url !== "https://hermes.swap.io/v1/swap/build-tx" || typeof parsed.response?.body !== "string") throw new Error("Select the exported Swap.io build bundle. Wallet/keypair files are never accepted");
       setBundle(text); setBundleName(file.name); setMessage("Build bundle selected locally. Preview will verify its API payment receipt and original response.");

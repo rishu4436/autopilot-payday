@@ -51,6 +51,23 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("real database authorization and payroll regressions", () => {
+  it("creates milestones against the workspace project rather than a seeded project ID", async () => {
+    const db = await getDb();
+    await db.delete(schema.projects).where(eq(schema.projects.orgId, owner.orgId));
+    await db.insert(schema.projects).values({ id: "actual-workspace-project", orgId: owner.orgId, name: "Real project", summary: "" });
+    const person = (await books()).people[0]!;
+    expect((await saveMilestone(owner, { title: "Project regression", description: "Work", contributorId: person.id, amount: "0.01", dueOn: "2026-11-13", evidence: "" }))?.ok).toBe(true);
+    expect((await books()).tasks.find((t) => t.title === "Project regression")?.projectId).toBe("actual-workspace-project");
+  });
+  it("requires and records a batch rejection reason before releasing allocations", async () => {
+    const id = await batch(false);
+    expect((await decideBatch(owner, id, "rejected"))?.code).toBe("REASON_REQUIRED");
+    expect((await books()).items.some((item) => item.batchId === id)).toBe(true);
+    expect((await decideBatch(owner, id, "rejected", "Recipient needs review"))?.ok).toBe(true);
+    expect((await books()).items.some((item) => item.batchId === id)).toBe(false);
+    const events = await (await getDb()).select().from(schema.audits).where(eq(schema.audits.action, "payroll.rejected"));
+    expect(events[0]?.data).toContain("Recipient needs review");
+  });
   it("requires HTTPS for hosted financial origins while accepting the configured secure host", async () => {
     state.headers.set("host", "payday.example"); state.headers.set("origin", "http://payday.example"); process.env.APP_ORIGIN = "http://payday.example";
     await expect(requestDomain()).rejects.toThrow("HTTPS");

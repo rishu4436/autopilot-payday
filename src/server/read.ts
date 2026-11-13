@@ -66,7 +66,7 @@ export async function getWorkspace() {
     nextDue,
     refill,
     bootstrap,
-    pending: (operation && needsHuman(stateOf(operation.state)) ? 1 : 0) + books.batchRows.filter((batch) => batch.status === "DRAFT").length,
+    pending: operation && needsHuman(stateOf(operation.state)) ? 1 : 0,
     unread: noteRows.filter((note) => !note.readAt).length,
     decisions: decisionRows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     calls: callRows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),

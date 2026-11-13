@@ -17,6 +17,7 @@ export function ContributorTools({
   allowAction: (formData: FormData) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<(typeof rows)[number] | null>(null);
   const [state, formAction] = useForm(action);
   const shown = rows.filter((row) => `${row.name} ${row.role} ${row.address}`.toLowerCase().includes(query.toLowerCase()));
   return (
@@ -35,7 +36,7 @@ export function ContributorTools({
                 <td>{row.active ? "Active" : "Inactive"} · {row.allowlisted ? "Allowlisted" : "Not allowlisted"}</td>
                 <td>{row.paid}</td>
                 <td>{row.pending}</td>
-                <td>{owner && (
+                <td>{canEdit && <button className="btn" type="button" onClick={() => setEditing(row)}>Edit</button>}{owner && (
                   <form action={allowAction}>
                     <input type="hidden" name="id" value={row.id} />
                     <input type="hidden" name="allowlisted" value={row.allowlisted ? "false" : "true"} />
@@ -49,16 +50,18 @@ export function ContributorTools({
         </table>
       </div>
       {canEdit && (
-        <form className="panel stack" data-reload-after-submit="true" action={formAction}>
-          <strong>Add a contributor</strong>
+        <form key={editing?.id ?? "new"} className="panel stack" data-reload-after-submit="true" action={formAction}>
+          <strong>{editing ? "Edit contributor" : "Add a contributor"}</strong>
+          {editing && <><input type="hidden" name="id" value={editing.id} /><p>Changing the wallet or deactivating removes allowlisting. Review affected approved work before paying.</p></>}
           <div className="two">
-            <label className="field">Name<input name="displayName" required /></label>
-            <label className="field">Role<input name="roleTitle" required /></label>
-            <label className="field">Wallet<input name="address" required /></label>
-            <label className="field">Notes<input name="notes" /></label>
+            <label className="field">Name<input name="displayName" defaultValue={editing?.name} required /></label>
+            <label className="field">Role<input name="roleTitle" defaultValue={editing?.role} required /></label>
+            <label className="field">Wallet<input name="address" defaultValue={editing?.address} required /></label>
+            <label className="field">Notes<input name="notes" defaultValue={editing?.notes} /></label>
           </div>
-          <label><input type="checkbox" name="active" defaultChecked /> Active</label>
+          <label><input type="checkbox" name="active" defaultChecked={editing?.active ?? true} /> Active</label>
           <button className="btn primary" type="submit">Save</button>
+          {editing && <button className="btn" type="button" onClick={() => setEditing(null)}>Cancel edit</button>}
         </form>
       )}
     </div>

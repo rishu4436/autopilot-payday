@@ -12,7 +12,7 @@ export default async function AnalyticsPage() {
   const total = paid.reduce((sum, task) => sum + BigInt(task.amountAtomic), 0n);
   const quotes = data.quotes.length;
   const executed = data.swaps.filter((swap) => swap.status === "confirmed").length;
-  const refusals = data.decisions.filter((row) => row.kind === "reject").length;
+  const refusals = data.decisions.filter((row) => row.kind === "reject").length + data.audits.filter((row) => row.action === "payroll.refused").length;
   const x402 = data.calls.reduce((sum, call) => sum + (call.amountAtomic && call.receiptSignature ? BigInt(call.amountAtomic) : 0n), 0n);
   const points = paid.map((task) => ({ day: task.updatedAt.toISOString().slice(0, 10), usdc: Number(task.amountAtomic) / 1_000_000 }));
   const demo = data.books.org.mode === "demo";

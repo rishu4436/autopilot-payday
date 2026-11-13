@@ -28,6 +28,7 @@ import {
   organizations,
   locks,
   proofShares,
+  projects,
 } from "@/db/schema";
 import { proposalHash, type ProposalBody } from "@/domain/approval";
 import { assertCan, buildSignInMessage, can, consumeNonce, isRole, withinApproverLimit } from "@/domain/authz";
@@ -277,10 +278,12 @@ async function saveMilestoneImpl(session: Session, input: { id?: string; title: 
     return ok("Milestone updated");
   }
   const id = crypto.randomUUID();
+  const project = (await db.select().from(projects).where(eq(projects.orgId, session.orgId)).limit(1))[0];
+  if (!project) return fail("Workspace project is missing. Contact the owner.");
   await db.insert(milestones).values({
     id,
     orgId: session.orgId,
-    projectId: "proj_launch",
+    projectId: project.id,
     contributorId: person.id,
     title: input.title,
     description: input.description,
@@ -765,7 +768,7 @@ async function makeBatchImpl(session: Session, ids: string[]): Promise<ActionSta
   assertCan(session.role, "payroll.approve");
   const db = await getDb();
   const books = await loadBooks(db, session.orgId);
-  if (books.policy.paused) return fail("Agent is paused.", "AGENT_PAUSED");
+  if (books.policy.paused) { await audit(session, "payroll.refused", "policy", session.orgId, { code: "AGENT_PAUSED" }); return fail("Payroll is paused. Resume the agent before drafting or authorizing a batch.", "AGENT_PAUSED"); }
   if (new Set(ids).size !== ids.length || ids.length === 0) return fail("Duplicate or empty milestone selection", "DUPLICATE");
   const chosen = books.tasks.filter((task) => ids.includes(task.id));
   if (chosen.length !== ids.length) return fail("Milestone not found in this organization");
@@ -810,21 +813,24 @@ async function makeBatchImpl(session: Session, ids: string[]): Promise<ActionSta
   return ok("Batch drafted. It is not a payment yet.");
 }
 
-async function decideBatchImpl(session: Session, batchId: string, decision: "approved" | "rejected"): Promise<ActionState> {
+async function decideBatchImpl(session: Session, batchId: string, decision: "approved" | "rejected", reason = ""): Promise<ActionState> {
   assertCan(session.role, "payroll.approve");
   const db = await getDb();
   const books = await loadBooks(db, session.orgId);
   const batch = books.batchRows.find((row) => row.id === batchId);
   if (!batch || batch.status !== "DRAFT") return fail("That batch is not awaiting approval.");
   if (decision === "rejected") {
+    if (!reason.trim()) return fail("Enter a reason for rejecting this batch.", "REASON_REQUIRED");
     await db.update(batches).set({ status: "REJECTED" }).where(eq(batches.id, batchId));
     await db.delete(batchItems).where(eq(batchItems.batchId, batchId));
+    await audit(session, "payroll.rejected", "batch", batchId, { reason: reason.trim().slice(0, 500) });
     return ok("Batch rejected. The milestones can be selected again.");
   }
-  if (books.policy.paused) return fail("Agent is paused.", "AGENT_PAUSED");
+  if (books.policy.paused) { await audit(session, "payroll.refused", "policy", session.orgId, { code: "AGENT_PAUSED" }); return fail("Payroll is paused. Resume the agent before drafting or authorizing a batch.", "AGENT_PAUSED"); }
   if (!await validBatchRecipients(session.orgId, batchId)) return fail("Batch recipients or approvals changed.", "RECIPIENT_CHANGED");
   if (books.ledger.availableUsdcAtomic < BigInt(batch.totalAtomic)) {
-    return fail(`Treasury USDC cannot cover this batch. Shortfall remains ${usdc(books.ledger.shortfallAtomic)}.`, "INSUFFICIENT_USDC");
+    await audit(session, "payroll.refused", "batch", batchId, { code: "INSUFFICIENT_USDC" });
+    return fail(`Insufficient treasury USDC: available ${usdc(books.ledger.availableUsdcAtomic)}, required ${usdc(batch.totalAtomic)}. No authorization or payment was created.`, "INSUFFICIENT_USDC");
   }
   const items = books.items.filter((item) => item.batchId === batchId);
   const body: ProposalBody = {

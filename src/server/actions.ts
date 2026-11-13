@@ -138,12 +138,12 @@ export async function pauseAction(formData: FormData): Promise<void> {
   await run((session) => setPaused(session, formData.get("paused") === "true"));
 }
 
-export async function batchAction(formData: FormData): Promise<void> {
-  await run((session) => makeBatch(session, formData.getAll("milestoneId").map(String)));
+export async function batchAction(formData: FormData): Promise<ActionState> {
+  return run((session) => makeBatch(session, formData.getAll("milestoneId").map(String)));
 }
 
-export async function batchDecisionAction(formData: FormData): Promise<void> {
-  await run((session) => decideBatch(session, String(formData.get("id")), formData.get("decision") === "approved" ? "approved" : "rejected"));
+export async function batchDecisionAction(formData: FormData): Promise<ActionState> {
+  return run((session) => decideBatch(session, String(formData.get("id")), formData.get("decision") === "approved" ? "approved" : "rejected", String(formData.get("reason") ?? "")));
 }
 
 export async function payoutAction(formData: FormData): Promise<void> {
